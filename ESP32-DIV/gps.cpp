@@ -180,7 +180,10 @@ constexpr int kUiGap = 3;
 constexpr int kHeaderY = 2;
 constexpr int kTabsY = 24;
 constexpr int kCardsY = 46;
-constexpr int kCardH = 29;
+/* 32, not 29: the value inside is font 2 at 16 px rather than font 1
+ * at 8. Label 8 px at y+2, value at y+13, 3 px below. The card ends
+ * at 78 against kBodyTop 82, inside slack that was already there. */
+constexpr int kCardH = 32;
 constexpr int kBodyTop = 82;
 
 constexpr uint32_t kNavCooldownMs = 520;
@@ -749,6 +752,21 @@ void feedSerial() {
   }
 }
 
+/* DOP as the card will print it.
+ *
+ * "H999.9 P999.9" is 96 px in font 2 against the 93 px the card has for
+ * text, so an unbounded %.1f pair can run off a card. A DOP over about 20
+ * already means the solution is unusable and the exact figure past that
+ * says nothing, so the display clamps at 99.9 and the string is bounded at
+ * "H99.9 P99.9", 80 px.
+ *
+ * check_text_margins.py cannot measure this one: the value reaches
+ * drawMetricCardGx as a parameter and the x is x + 4 off another, so it
+ * skips for an x that does not resolve. The bound is held here instead. */
+static inline float dopForDisplay(float dop) {
+  return dop > 99.9f ? 99.9f : dop;
+}
+
 template<typename Gfx>
 void drawFixBadgeGx(Gfx& g, const int PW, int x, int y) {
   const char* tag = "NOFIX";
@@ -761,11 +779,15 @@ void drawFixBadgeGx(Gfx& g, const int PW, int x, int y) {
     tag = (gsaFixMode == 3) ? "FIX 3D" : "FIX 2D";
   }
 
-  g.setTextFont(1);
+  /* Font 2. This is the most important word on the screen and it is six
+   * characters: "FIX 3D" is 42 px at x=272 on a 320 px panel, and 16 px
+   * from y=5 ends at 21 against the tabs at kTabsY 24. */
+  g.setTextFont(2);
   g.setTextSize(1);
   g.setTextDatum(TL_DATUM);
   g.setTextColor(fg, FEATURE_BG);
   g.drawString(tag, x, y);
+  g.setTextFont(1);
 }
 
 template<typename Gfx>
@@ -957,21 +979,26 @@ void drawPanelFrameGx(Gfx& g, int x, int y, int w, int h, uint16_t outline) {
 
 template<typename Gfx>
 void drawMetricCardGx(Gfx& g, int x, int y, int w, const char* label,
-                      const char* value, uint16_t valueColor,
-                      const char* value2 = nullptr) {
+                      const char* value, uint16_t valueColor) {
   drawPanelFrameGx(g, x, y, w, kCardH, UI_LINE);
+
+  /* The label is a caption and stays 8 px. The value is the reading, and at
+   * 8 px it was 1.23 mm on a 165 ppi panel. Font 2 is 16. The widest value
+   * any caller passes is 62 px of the 93 this card has for text, measured
+   * from the font's width table rather than counted. */
   g.setTextFont(1);
   g.setTextSize(1);
   g.setTextDatum(TL_DATUM);
   g.setTextColor(UI_DIM_TEXT, FEATURE_BG);
   g.drawString(label, x + 4, y + 2);
+
+  /* One value, not two. Two 16 px lines plus a label want 40 px in a card
+   * that cannot pass 36 without pushing the body down, so the DOP pair is
+   * one string now. */
+  g.setTextFont(2);
   g.setTextColor(valueColor, FEATURE_BG);
-  if (value2 != nullptr && value2[0] != '\0') {
-    g.drawString(value, x + 4, y + 11);
-    g.drawString(value2, x + 4, y + 19);
-  } else {
-    g.drawString(value, x + 4, y + 15);
-  }
+  g.drawString(value, x + 4, y + 13);
+  g.setTextFont(1);
 }
 
 /** Same x positions and width as drawMetricCardGx columns so tabs align with cards. */
@@ -1223,21 +1250,18 @@ void renderPanelGx(Gfx& g) {
 
     char lineUtc[42];
     snprintf(lineUtc, sizeof(lineUtc), "%s", utcStr);
-    char dopLine1[16];
-    char dopLine2[16];
+    char dopLine1[24];
     int inFix = countInSolutionTotal();
     if (hdopLive >= 0.f && pdopLive >= 0.f) {
-      snprintf(dopLine1, sizeof(dopLine1), "H%.1f", hdopLive);
-      snprintf(dopLine2, sizeof(dopLine2), "P%.1f", pdopLive);
+      snprintf(dopLine1, sizeof(dopLine1), "H%.1f P%.1f",
+               dopForDisplay(hdopLive), dopForDisplay(pdopLive));
     } else {
-      dopLine2[0] = '\0';
       snprintf(dopLine1, sizeof(dopLine1), "SV%02d S%02d", rowCount,
                countSnrKnown());
     }
 
     drawMetricCardGx(g, cardX0, kCardsY, cardW, "UTC", lineUtc, UI_TEXT);
-    drawMetricCardGx(g, cardX1, kCardsY, cardW, "DOP", dopLine1, UI_OK,
-                     dopLine2[0] ? dopLine2 : nullptr);
+    drawMetricCardGx(g, cardX1, kCardsY, cardW, "DOP", dopLine1, UI_OK);
     char countBuf[16];
     snprintf(countBuf, sizeof(countBuf), "U%u F%d", (unsigned)satsUsedGga,
              inFix);
@@ -1256,15 +1280,13 @@ void renderPanelGx(Gfx& g) {
     char lineUtc[42];
     snprintf(lineUtc, sizeof(lineUtc), "%s", utcStr);
     int inFix = countInSolutionTotal();
-    char dopLine1[16];
-    char dopLine2[16];
-    dopLine2[0] = '\0';
+    char dopLine1[24];
     if (hdopLive >= 0.f && pdopLive >= 0.f) {
-      snprintf(dopLine1, sizeof(dopLine1), "H%.1f", hdopLive);
-      snprintf(dopLine2, sizeof(dopLine2), "P%.1f", pdopLive);
+      snprintf(dopLine1, sizeof(dopLine1), "H%.1f P%.1f",
+               dopForDisplay(hdopLive), dopForDisplay(pdopLive));
     } else if (hdopLive >= 0.f) {
-      snprintf(dopLine1, sizeof(dopLine1), "H%.1f U%u", hdopLive,
-               (unsigned)satsUsedGga);
+      snprintf(dopLine1, sizeof(dopLine1), "H%.1f U%u",
+               dopForDisplay(hdopLive), (unsigned)satsUsedGga);
     } else {
       snprintf(dopLine1, sizeof(dopLine1), "SV%02d S%02d", rowCount,
                countSnrKnown());
@@ -1273,8 +1295,7 @@ void renderPanelGx(Gfx& g) {
     char fixBuf[12];
     snprintf(fixBuf, sizeof(fixBuf), "U%u F%d", (unsigned)satsUsedGga, inFix);
     drawMetricCardGx(g, cardX0, kCardsY, cardW, "UTC", lineUtc, UI_TEXT);
-    drawMetricCardGx(g, cardX1, kCardsY, cardW, "DOP", dopLine1, UI_OK,
-                     dopLine2[0] ? dopLine2 : nullptr);
+    drawMetricCardGx(g, cardX1, kCardsY, cardW, "DOP", dopLine1, UI_OK);
     drawMetricCardGx(g, cardX2, kCardsY, cardW, "FIX", fixBuf, UI_ACCENT);
 
     if (!isnan(navLat) && !isnan(navLon)) {
