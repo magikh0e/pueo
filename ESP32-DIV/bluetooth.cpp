@@ -227,14 +227,17 @@ bool ensureBleStackReady() {
   /* Reclaim before measuring, not after.
    *
    * This read the heap, refused below 40 KB, and then released the Classic
-   * BT controller's RAM, which the comment below says is about 30 KB. A
+   * BT controller's RAM, measured at 14,968 bytes on this board. A
    * board at 30 KB free was therefore told it had not got enough memory by
    * the function that was one statement away from handing it 30 KB more.
    *
    * Releasing first is safe whether or not the stack then comes up. This
    * firmware is NimBLE only, Classic BT is never initialised, and that RAM
    * was never going to be used. The call already tolerates
-   * ESP_ERR_INVALID_STATE, which is what it returns the second time. */
+   * ESP_ERR_INVALID_STATE, which is what it returns the second time, and
+   * since setup() now does this at boot that is the usual case: features
+   * that never touch Bluetooth were paying for the reservation, and
+   * Wardrive could not create a 10 KB task because of it. */
   esp_err_t rel = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
   if (rel != ESP_OK && rel != ESP_ERR_INVALID_STATE) {
     Serial.printf("[ble] classic mem_release: %s\n", esp_err_to_name(rel));

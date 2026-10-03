@@ -4208,6 +4208,36 @@ void setup() {
   delay(50);
   Serial.println("[boot] start");
 
+  /* Hand back the Classic BT controller's RAM before anything allocates.
+   *
+   * 14,968 bytes, measured on the board at boot: heap 146,104 to 161,072.
+   * The comment in ensureBleStackReady() says about 30 KB and that is an
+   * estimate nobody had checked; this is the figure from the serial log.
+   *
+   * This firmware is NimBLE only and never initialises Classic BT, so the
+   * reservation is dead weight. It used to be released inside
+   * ensureBleStackReady(), which meant it was released only if you opened a
+   * Bluetooth feature, and Wardrive on a fresh boot then failed to create
+   * its 10240 byte scan task because there was no contiguous block that
+   * size. Which features worked depended on the order you visited them in.
+   *
+   * Releasing here means the fragmentation never happens rather than being
+   * undone afterwards. The call in ensureBleStackReady() stays and is now
+   * the second one, which returns ESP_ERR_INVALID_STATE and which that
+   * function already tolerates. */
+  {
+    const uint32_t before = ESP.getFreeHeap();
+    const esp_err_t rel =
+        esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+    if (rel == ESP_OK) {
+      Serial.printf("[boot] classic BT RAM released, heap %u -> %u\n",
+                    (unsigned)before, (unsigned)ESP.getFreeHeap());
+    } else if (rel != ESP_ERR_INVALID_STATE) {
+      Serial.printf("[boot] classic BT mem_release: %s\n",
+                    esp_err_to_name(rel));
+    }
+  }
+
 #if !BOARD_HAS_ESP32S3
   // Weak USB / backlight load can brownout classic ESP32 during intro.
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
