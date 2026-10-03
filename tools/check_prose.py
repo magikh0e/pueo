@@ -24,7 +24,9 @@ Three house rules, none of them about taste for its own sake:
 
 Reads source; needs no board. The site is checked when .publish.local says
 where it is and skipped silently otherwise, which is the case inside
-pueo-<version>-src.zip.
+pueo-<version>-src.zip. That covers the seven pages and the site repo's own
+README, which was missed for four releases because it lived here until the
+site was split out and no glob followed it.
 
 What is exempt, and why
 -----------------------
@@ -83,7 +85,25 @@ def targets():
     d = site_dir()
     if d:
         out += sorted(d.glob("*.html"))
+        # The site repo's own README, one level up from the published
+        # directory. It was in this repo until the site was split out, so
+        # none of the globs above reached it, and it kept ten dashes
+        # through four releases while this check reported green.
+        out.append(d.parent / "README.md")
     return [p for p in out if p.is_file()]
+
+
+def label(p):
+    """A name that says which file, when two share a basename.
+
+    There are two README.md in the corpus now, this repo's and the site's,
+    and a line number against the wrong one sends you to the wrong file.
+    Anything outside this repo is shown with its parent directory.
+    """
+    try:
+        return str(p.relative_to(ROOT))
+    except ValueError:
+        return "%s/%s" % (p.parent.name, p.name)
 
 
 def blank(m):
@@ -179,7 +199,7 @@ def main():
                 continue          # a range
             if b[-1] == "|" and a[0] == "|":
                 continue          # an empty table cell
-            hits.append((p.name, lines_of(t, m.start()),
+            hits.append((label(p), lines_of(t, m.start()),
                          " ".join(t[max(0, m.start() - 46):m.end() + 46].split())))
     for f, ln, c in hits[:20]:
         print("    %-22s:%-5d %s" % (f, ln, c[:94]))
@@ -195,7 +215,7 @@ def main():
         t = prose_of(p)
         for pat, what in NARRATION:
             for m in re.finditer(pat, t, re.I):
-                nar.append((p.name, lines_of(t, m.start()), m.group(0), what))
+                nar.append((label(p), lines_of(t, m.start()), m.group(0), what))
     for f, ln, s, what in nar[:20]:
         print("    %-22s:%-5d %-30r %s" % (f, ln, s, what))
     ok("nothing about the conversation that wrote it", not nar,
@@ -208,7 +228,7 @@ def main():
         t = prose_of(p)
         for pat, what in FILLER:
             for m in re.finditer(pat, t, re.I):
-                fil.append((p.name, lines_of(t, m.start()), m.group(0), what))
+                fil.append((label(p), lines_of(t, m.start()), m.group(0), what))
     for f, ln, s, what in fil[:20]:
         print("    %-22s:%-5d %-30r %s" % (f, ln, s, what))
     ok("and no filler", not fil, "%d phrases" % len(fil))
