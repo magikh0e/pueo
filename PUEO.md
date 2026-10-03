@@ -66,6 +66,7 @@ ESP32-DIV/board_pueo.h   board profile: pin overrides + rationale
 ESP32-DIV/BoardConfig.h       board selection (BOARD_PUEO is on)
 tools/check_pinmap.py         resolves the pin macros, flags collisions
 docs/pueo/hardware.md    pin map, wiring decisions, known upstream bugs
+docs/pueo/ui.md          the display stack, and why there is no toolkit
 ```
 
 The board profile is an *overlay*, not a fourth board branch. Every pin macro
@@ -348,6 +349,9 @@ missed:
 - `wifi.cpp`, `bluetooth.cpp`, `subghz.cpp`, `utils.cpp`: the per-screen UI
   macros are scoped constants now, so `-w` could come off
 - `docs/pueo/spi-bus.md`: the bus map, and why touch was losing it
+- `docs/pueo/ui.md`: that the UI is TFT_eSPI called directly, with no
+  LVGL and no widget layer, what that costs, and which checks in
+  `tools/` exist to pay for it
 - `Spotter.{h,cpp}`, `SpotterSignatures.h`: passive detection of ALPR
   cameras and smart glasses from WiFi OUIs and BLE service UUIDs
 - `Branding.h` and the boot screen: the fork's own name, version and logo
