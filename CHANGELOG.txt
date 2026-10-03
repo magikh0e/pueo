@@ -11,6 +11,177 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.29 - 2026-10-03
+-------------------
+
+  All four of these came off a board.
+
+  * 15 KB OF CLASSIC BT RAM WAS HELD unless you opened a Bluetooth feature
+    first, and Wardrive could not start because of it.
+
+    Reported from a board: "Startup failed. Could not start scan worker."
+    That message has one source, xTaskCreatePinnedToCore failing to make the
+    10240 byte stack for wardfg, which fails when no contiguous block that
+    size exists.
+
+    The block was there, reserved. This firmware is NimBLE only and never
+    initialises Classic BT, so the controller's RAM is dead weight, and
+    esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT) hands it back.
+    That call lived in exactly one place: ensureBleStackReady(), in
+    bluetooth.cpp.
+
+    So the memory came back only if you happened to open a Bluetooth
+    feature. Boot and go straight to Wardrive and it was still held, and a
+    10 KB task had to find room around it. Which features worked depended on
+    the order you visited them in, which is not a property anybody can
+    reason about from the screen.
+
+    Released once in setup() now, before anything allocates, so the
+    fragmentation never happens rather than being undone later. The call in
+    ensureBleStackReady() stays: it is idempotent, the second one returns
+    ESP_ERR_INVALID_STATE, and that function already tolerated exactly that.
+
+    14,968 bytes, from the boot log rather than from arithmetic:
+
+      [boot] classic BT RAM released, heap 146104 -> 161072
+
+    Both comments said "about 30 KB" before, an estimate nobody had checked.
+    They carry the measured figure now.
+
+    The failure message also said nothing actionable. It reports the largest
+    free block alongside the total free heap, because a task stack needs one
+    contiguous block and the total can look comfortable while no single
+    block fits.
+
+  * WARDRIVE SAID WAIT FOREVER with no GPS module fitted.
+
+    The GPS card showed a WAIT pill, "Sats 0 HDOP -1.0" and "No fix yet",
+    and kept showing it. That is exactly what it shows for a module that is
+    working and has not acquired, so the screen could not be read.
+
+    GPS is still out of submenuHardwareNote() and that stands: there is no
+    cheap probe, because the module answers by emitting NMEA when it is
+    ready and a brief look that found none would report "no GPS" for one
+    still waking up. This is the other case. An app that has had the port
+    open for seconds is listening rather than taking a snapshot, and silence
+    over time is evidence.
+
+    What makes the test sound: a module that is present emits NMEA from
+    power-up whether or not it has a fix, including GSV with nothing in
+    view. One that is absent, unpowered, miswired or at the wrong baud emits
+    nothing. So the test is bytes on the UART, stamped before any parsing,
+    not sentences parsed and not a fix. A module talking rubbish at the
+    wrong baud is still a module, and reporting it missing would send
+    somebody to check wiring that is fine.
+
+    Four states. Opening, under 5 s since the port opened, says WAIT.
+    Silent, 5 s and not one byte, says NONE and names GPIO 1. Stale, bytes
+    that arrived and stopped for 8 s, says LOST, which is a different fault
+    with a different cause. Live says WAIT until there is a fix, as before.
+    5 s because a GPS emits its first sentence within about a second of
+    power, long before it can fix.
+
+    The state goes into WardMainSnap and the gpsDirty test, because the card
+    repaints only when that snapshot changes and a state that cannot trigger
+    a repaint is a warning nobody sees.
+
+    The Satellites screen had the same blind spot. Its staleGsv is guarded
+    by (lastGsvMs != 0), so the one state it could not report was a module
+    that never spoke: no GSV ever, nothing on screen, identical to one still
+    acquiring. It shows "no GPS" or "GPS lost" now and keeps "no GSV" for a
+    module talking but quiet on GSV specifically.
+
+  * THE THREE READINGS AT THE TOP OF THE GPS SCREEN WERE 1.23 MM.
+
+    gps.cpp draws at font 1 size 1 in eight functions, which is 8 px on a
+    165 ppi panel. Most of that is correct and stays: the sky plot's
+    satellite labels sit at the satellites' own coordinates, the legend
+    strip and footer hints are captions, and in the SNR table the bar is the
+    information with a number beside it, the argument shared.h already makes
+    for the drone detector.
+
+    The metric cards are the exception. UTC, DOP and FIX are three readouts
+    with no graphical form and they are what the screen is for. The value in
+    each is font 2; the label above it stays 8 px, because a caption is a
+    caption.
+
+    Sized from the font tables rather than by eye. The card has 93 px of
+    text area and the widest value any caller can pass is "H99.9 P99.9" at
+    80 px. Font 4 was tried first and does not fit, at 94 to 109 px, so
+    font 2 is what the card can hold rather than what looked right. kCardH
+    grows 29 to 32 and ends at 78 against kBodyTop 82, inside slack that
+    already existed.
+
+    DOP is one line. Two 16 px lines plus a label want 40 px in a card that
+    cannot pass 36 without displacing the body. drawMetricCardGx loses the
+    value2 parameter with the path that used it.
+
+    That needed a bound: "H999.9 P999.9" is 96 px against 93. A DOP over
+    about 20 already means the solution is unusable and the figure past that
+    says nothing, so dopForDisplay() clamps at 99.9. check_text_margins
+    cannot measure these, because the value arrives as a parameter and the x
+    is x + 4 off another, so it skips for an x that does not resolve; the
+    bound is held in the source instead.
+
+    The fix badge is font 2 too. It is the most important word on the screen
+    and at most six characters: "FIX 3D" is 42 px at x=272 on a 320 px
+    panel.
+
+  * CHECK_TEXT_MARGINS.PY MEASURED FONT 1 and assumed everything else was
+    font 1 too.
+
+    setTextFont's argument was resolved with int() behind a digit regex, so
+    setTextFont(PUEO_BODY_FONT) gave None and the caller then assumed font 1
+    and measured at a flat 6 px per character. PUEO_BODY_FONT is 2:
+    proportional, 3 to 10 px, averaging nearer 8. Nineteen call sites were
+    measured about a quarter narrow, in the direction that passes a line
+    which overruns. The font numbers come from shared.h now, so renumbering
+    the constant cannot leave the check agreeing with an old value.
+
+    Nothing overran, and the first attempt at proving otherwise was wrong in
+    a useful way: it charged the widest glyph for all twelve characters of
+    Hunt's age column, which is the error tft_fonts.py's own docstring warns
+    against. Measured properly that field is 30 px at "999s" and fits at 310
+    of 320 with eleven digits.
+
+    The other half was 40 sites skipped for "an explicit font that is not
+    1". The unit is pixels per font now, which is the real change: a
+    character count cannot be compared across fonts, and param_width was
+    picking the widest caller by character count, which in a proportional
+    font is a different question.
+
+    A format is charged its literal runs measured plus each conversion at
+    the widest character that conversion can produce. Not the font's widest
+    glyph, 25 px in font 4 and enough to fail every line on the device. Not
+    a digit either: font 4's uppercase hex reaches 18 px against a digit's
+    14, so charging a digit for %X under-measures a MAC by 48 px.
+
+    Removing the font gate did not measure those 40, it moved them to "size
+    set neither here nor by any caller", because those functions select a
+    font and never touch the size. Measured before assuming: of the sites
+    where both resolve, font 2 is size 1 at all 29, while font 1 appears at
+    1, 2 and 3. So a proportional font with no size set is measured at 1,
+    the library default, and font 1 is still skipped, because PUEO_BODY_SIZE
+    is 2 and multiplies font 1 and never font 2.
+
+    48 measured to 54, the rest landing in honest skips. Verified by
+    lengthening a font 2 string in Hunt's picker and watching it fail at 345
+    px on a 320 px panel, then pass again restored.
+
+    Two things found alongside. check_text_fits.py still carried a 240 px
+    2.8 inch panel entry that check_text_margins dropped on 2026-09-26, so
+    the two were measuring different hardware and one of them hardware that
+    cannot be built; dropping it took its count from 8 to 4, because it had
+    been measuring the same four strings twice. And its first line claimed
+    centred text generally while showLine has exactly one caller,
+    SignalGauge.cpp. Reading that line and concluding centred text was
+    covered is how the About page came to be drawn in the smallest font on
+    the device with nothing measuring it, so the scope is stated now and
+    points at check_centre_fits.py.
+
+  51 checks pass.
+
+
 0.4.28 - 2026-10-03
 -------------------
 
@@ -3911,6 +4082,11 @@ of them, because a digest is the one thing about an old release
 that is still worth having after the file itself is gone.
 
 Generated by tools/changelog_digests.py from dist/*.sha256.
+
+0.4.28
+  de9199d9e83da60e1690b74476329a2323818ddf986c6b9909c237879c6ff8ed  pueo-0.4.28-beacon-35-merged.bin
+  98c293cf029a69c994c5f865f190762a513ee7d6e5c28700e31a66c46092006c  pueo-0.4.28-merged.bin
+  c96500ec008f2c2334b5b0025cb8e82e11a399388920da98eae7ac879fb7ff3f  pueo-0.4.28-src.zip
 
 0.4.27
   d733a451b02b651a6eb8ae1c089d7b6facd7dc5227cc3af67b6ba73b7967032e  pueo-0.4.27-beacon-35-merged.bin

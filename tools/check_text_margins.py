@@ -29,7 +29,7 @@ enough to fail every line on the device, nor the width of a digit, since
 font 4's uppercase hex reaches 18 px against a digit's 14 and charging a
 digit for %X under-measures a MAC by 48 px.
 
-This measured font 1 only until 0.4.28, and the gap was not the obvious half.
+This measured font 1 only until 0.4.29, and the gap was not the obvious half.
 setTextFont's argument was resolved with int() behind a digit regex, so
 setTextFont(PUEO_BODY_FONT) gave None and the caller then assumed font 1:
 nineteen call sites that draw in font 2 were measured at 6 px per character,
