@@ -11,6 +11,107 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.28 - 2026-10-03
+-------------------
+
+  Documentation and tooling. The firmware is 0.4.27's firmware: nothing in
+  ESP32-DIV/ or PueoBeacon/ was touched, and the image differs by 70 bytes
+  of 1,867,776. Five of those are content, each the last digit of the
+  version string, in the About page's byline, the About details title, the
+  two WiGLE fields and the wardrive User-Agent. The other 65 are two
+  digests: the app descriptor's SHA-256 of the ELF at app0+0xB0, and the
+  SHA-256 and checksum appended to the image. Counted, not reasoned about.
+
+  * THE UI IS TFT_eSPI CALLED DIRECTLY, and that was written down nowhere.
+
+    docs/pueo/ui.md. No LVGL, no widget library, no retained object tree, no
+    invalidation and no event dispatch: 260 fillRect, 159 drawString, 151
+    drawFastHLine, 118 drawBitmap, 34 drawCentreString. The decision
+    appeared in no doc, no changelog entry and no comment above the drawing
+    code, so the constraints it imposes lived only in the shape of the code
+    and in the checks that compensate for them.
+
+    Two numbers carry it. One 320x480 framebuffer at 16 bpp is 307,200
+    bytes against 203,252 bytes of free DRAM, so a full framebuffer does not
+    fit, let alone the two a toolkit wants for compositing; LVGL would run
+    with partial-render buffers, redrawing regions on demand, which is what
+    the code already does by hand. And the app is 57% of a single 3.00 MB
+    slot, with the headroom already spent on radios. Neither forbids a
+    toolkit. Together they mean one would run in its least comfortable mode
+    while costing the flash the features use.
+
+    The rest of the doc is what the absence costs, item by item, and every
+    item is a bug that shipped. No clipping, so three checks measure text
+    split by how it is drawn rather than by preference. No font metrics at
+    layout time, so tft_fonts.py parses the width tables. A 165 ppi panel
+    where one pixel is 0.154 mm, which is why PUEO_BODY_FONT and
+    PUEO_BODY_SIZE are both 2 and not the same 2. One shared mutable tft
+    whose font, size and datum persist across screens, which is the Hunt
+    picker bug stated as a class. No layout engine, so the grid is twelve
+    constants. And coordinates rather than events, which is both why rows
+    are the tap targets and how five menus kept a 2.8 inch hit box on a
+    320 px panel.
+
+    It also records that render_screens.py models the screen rather than
+    executing it, so it can agree with itself while disagreeing with the
+    panel, and that the About page is drawn by neither it nor
+    check_render_sync.py.
+
+    Every figure was recomputed rather than carried across: 576.9 px
+    diagonal, 164.8 ppi, 0.154 mm per pixel, 96 x 92 px tiles at 14.8 x
+    14.2 mm, 7 mm as 45 px, 30 px rows as 4.6 mm. GRID_TILE_W is shown as
+    the expression it is rather than the 96 it evaluates to, since the gaps
+    are the input and the tile width falls out of them.
+
+  * CHECK_PROSE.PY COULD NOT SEE THE SITE'S OWN README, for four releases.
+
+    It globs docs/pueo/*.md, three files at this repo's root, and the site
+    tree's *.html. The site README was none of those: it was in this repo
+    until the site became its own, and no glob followed it out. Ten dashes
+    sat in it while the check reported green on everything it could reach,
+    and nothing said what it could not reach.
+
+    site_dir() already resolves PUEO_PUBLISH_DIR from .publish.local, which
+    points at the published site/ subdirectory, so the repo root is its
+    parent. Same skip behaviour as the pages: no .publish.local means the
+    site is not on this machine, which is the case inside
+    pueo-<version>-src.zip. Both halves were verified by running it, an
+    injected dash failing at pueo-site/README.md and the check still passing
+    with .publish.local moved aside.
+
+    Adding that file put two README.md in the corpus and the reports printed
+    basenames, which pointed at neither in particular and wasted the line
+    number that is the only reason to print anything. There is a label()
+    helper now, used at all three reporting sites rather than patched at the
+    one that happened to be in view.
+
+  * Also, in the site repo, which is not published to GitHub: three nav
+    entries wore the name of something else in the same nav. "Surveillance"
+    was a section on the overview page while the Surveillance page sat under
+    What's added with the identical label, so clicking the word that said
+    Surveillance gave the summary. "Overview" was a section of
+    firmware.html while Overview is the front page. And the Hardware
+    dropdown opened with an entry called Hardware. Every link was correct,
+    which is why nothing caught them; the labels were the fault. They read
+    "What is in range", "What it is" and "The board" now, each taken from
+    the section's own heading.
+
+    tools/check-nav.py holds the nav, because nothing did. Seven pages carry
+    their own copy by hand with no template, so the copies can drift and the
+    only way to notice was to open two pages and compare dropdowns. It holds
+    them identical once the two per-page attributes are removed, resolves
+    every href against the tree including anchor ids, requires one label to
+    mean one destination anywhere in the nav, and requires aria-current on
+    the entry for the page being read and nowhere else.
+
+    The collision rule was first written per dropdown and could not see the
+    one that prompted it, since those two entries are in different
+    dropdowns and neither is a top-level page. Widening it to one label, one
+    destination is what surfaced the other two.
+
+  51 checks pass.
+
+
 0.4.27 - 2026-10-03
 -------------------
 
@@ -3810,6 +3911,11 @@ of them, because a digest is the one thing about an old release
 that is still worth having after the file itself is gone.
 
 Generated by tools/changelog_digests.py from dist/*.sha256.
+
+0.4.27
+  d733a451b02b651a6eb8ae1c089d7b6facd7dc5227cc3af67b6ba73b7967032e  pueo-0.4.27-beacon-35-merged.bin
+  4d21874d25376de8560dc62030687d2249b20aece273cbc12b10d1ec5d847040  pueo-0.4.27-merged.bin
+  dbb07e71740b81ae944bde46cc08d25227368ef2a79fd6ae4bffc49d99b7ca87  pueo-0.4.27-src.zip
 
 0.4.26
   1f7dcd99e29cb409a864fbf15f13b0d7fecdcb33281f8ecc8e4cfcef1a748771  pueo-0.4.26-beacon-35-merged.bin
