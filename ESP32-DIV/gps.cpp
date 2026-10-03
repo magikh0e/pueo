@@ -88,10 +88,31 @@ static void gpsUart0Release() {}
 static void gpsUart0Restore() {}
 #endif
 
+/* Whether the module is talking at all, which is a different question from
+ * whether it has a fix.
+ *
+ * lastGpsByteMs is any byte on the UART, not a parsed sentence and not a
+ * valid checksum: a module at the wrong baud rate is present and should not
+ * be reported as missing, and one emitting GSV with nothing in view is
+ * working exactly as it should.
+ *
+ * gpsPortOpenMs is the grace period. GPIO 1 is shared with the console, so
+ * the port is opened and closed around each session and there is always a
+ * moment after opening when silence means nothing yet.
+ *
+ * Declared up here rather than beside the rest of the NMEA state because
+ * gpsPortOpen() below stamps the second one. */
+uint32_t lastGpsByteMs = 0;
+uint32_t gpsPortOpenMs = 0;
+
 static void gpsPortOpen() {
   gpsSerial.end();
   gpsUart0Release();
   gpsSerial.begin(GPS_UART_BAUD, SERIAL_8N1, GPS_UART_RX, GPS_UART_TX);
+  /* A fresh session starts with nothing heard, so a module unplugged
+   * between sessions is reported rather than remembered as working. */
+  gpsPortOpenMs = millis();
+  lastGpsByteMs = 0;
 }
 
 static void gpsPortClose() {
@@ -236,6 +257,28 @@ double navLon = NAN;
 float navAltM = NAN;
 bool rmcNavValid = false;
 uint32_t lastNavMs = 0;
+
+/* 5 s of silence from a freshly opened port is a module that is not there.
+ * A GPS emits its first sentence within about a second of power, long
+ * before it can fix. 8 s for one that was talking and stopped, which is the
+ * figure the Satellites screen already used for GSV. */
+constexpr uint32_t kGpsSilentMs = 5000;
+constexpr uint32_t kGpsStaleMs = 8000;
+
+enum class GpsLink : uint8_t { Opening, Silent, Stale, Live };
+
+static GpsLink gpsLinkState() {
+  const uint32_t now = millis();
+  if (lastGpsByteMs != 0) {
+    return ((uint32_t)(now - lastGpsByteMs) > kGpsStaleMs) ? GpsLink::Stale
+                                                           : GpsLink::Live;
+  }
+  if (gpsPortOpenMs == 0) {
+    return GpsLink::Opening;
+  }
+  return ((uint32_t)(now - gpsPortOpenMs) > kGpsSilentMs) ? GpsLink::Silent
+                                                          : GpsLink::Opening;
+}
 
 void stripChecksum(char* s) {
   char* star = strchr(s, '*');
@@ -733,6 +776,10 @@ int countInSolutionTotal() {
 void feedSerial() {
   while (gpsSerial.available()) {
     char c = (char)gpsSerial.read();
+    /* Any byte, before any parsing. A module talking rubbish is still a
+     * module, and reporting it missing would send somebody to check wiring
+     * that is fine. */
+    lastGpsByteMs = millis();
     if (c == '\n') {
       lineBuf[lineLen] = '\0';
       if (lineLen > 0) {
@@ -1213,8 +1260,14 @@ void renderPanelGx(Gfx& g) {
   int skyCy = kSkyCyDefault;
   int skyR = kSkyRDefault;
   uint32_t now = millis();
+  /* staleGsv was guarded by (lastGsvMs != 0), so the one state it could
+   * not report was a module that never spoke at all: no GSV ever, nothing
+   * on screen, identical to one still acquiring. The link state covers
+   * that, and keeps "no GSV" for a module that is talking but has gone
+   * quiet on GSV specifically. */
+  const GpsLink link = gpsLinkState();
   const bool staleGsv =
-      (lastGsvMs != 0) && (((uint32_t)(now - lastGsvMs)) > 8000);
+      (lastGsvMs != 0) && (((uint32_t)(now - lastGsvMs)) > kGpsStaleMs);
 
   g.setTextFont(2);
   g.setTextSize(1);
@@ -1226,7 +1279,12 @@ void renderPanelGx(Gfx& g) {
 
   drawFixBadgeGx(g, PW, PW - 48, 5);
 
-  if (staleGsv) {
+  if (link == GpsLink::Silent || link == GpsLink::Stale) {
+    g.setTextDatum(TR_DATUM);
+    g.setTextColor(UI_WARN, FEATURE_BG);
+    g.drawString(link == GpsLink::Silent ? "no GPS" : "GPS lost", PW - 5, 16);
+    g.setTextDatum(TL_DATUM);
+  } else if (staleGsv) {
     g.setTextDatum(TR_DATUM);
     g.setTextColor(UI_WARN, FEATURE_BG);
     g.drawString("no GSV", PW - 5, 16);
@@ -1838,6 +1896,9 @@ struct WardMainSnap {
   int32_t latE5;
   int32_t lonE5;
   int16_t altM;
+  /* The card repaints only when this snapshot changes, so a link state that
+   * is not in here is a warning that never appears. */
+  uint8_t link;
 };
 static WardMainSnap s_wardMainSnap = {};
 
@@ -2006,6 +2067,7 @@ static void wardMainSave(uint32_t dispL, uint32_t dispS, const char* dispP, bool
   s_wardMainSnap.maxAps = s_cfgMaxAps;
   s_wardMainSnap.fixQ = fixQuality;
   s_wardMainSnap.sats = satsUsedGga;
+  s_wardMainSnap.link = (uint8_t)gpsLinkState();
   if (hdopLive >= 0.f) {
     s_wardMainSnap.hdopCenti = (int)lroundf(hdopLive * 100.f);
   } else {
@@ -2265,10 +2327,12 @@ static void wardDrawBody(uint32_t linesWr, uint32_t scans, const char* path, boo
   if (!isnan(navAltM)) {
     altNow = (int16_t)lroundf((float)navAltM);
   }
+  const GpsLink linkNow = gpsLinkState();
   const bool gpsDirty = fullPaint || fixQuality != s_wardMainSnap.fixQ ||
                         satsUsedGga != s_wardMainSnap.sats || hcNow != s_wardMainSnap.hdopCenti ||
                         latNow != s_wardMainSnap.latE5 || lonNow != s_wardMainSnap.lonE5 ||
-                        altNow != s_wardMainSnap.altM;
+                        altNow != s_wardMainSnap.altM ||
+                        (uint8_t)linkNow != s_wardMainSnap.link;
   if (fullPaint) {
     tft.fillRect(0, kWardBodyY, scrW, contentBottom - kWardBodyY, FEATURE_BG);
   }
@@ -2376,6 +2440,12 @@ static void wardDrawBody(uint32_t linesWr, uint32_t scans, const char* path, boo
   tft.drawString("GPS", textX, rowY[0]);
   if (fix) {
     wardDrawPill(pillX, pillY, kFixPillW, pillH, "FIX", GREEN, BLACK);
+  } else if (linkNow == GpsLink::Silent) {
+    /* Nothing on the UART at all. Not a slow fix, no module talking. */
+    wardDrawPill(pillX, pillY, kWaitPillW, pillH, "NONE", RED, FEATURE_BG);
+  } else if (linkNow == GpsLink::Stale) {
+    /* It was talking. Something moved. */
+    wardDrawPill(pillX, pillY, kWaitPillW, pillH, "LOST", RED, FEATURE_BG);
   } else {
     wardDrawPill(pillX, pillY, kWaitPillW, pillH, "WAIT", ORANGE, FEATURE_BG);
   }
@@ -2391,6 +2461,20 @@ static void wardDrawBody(uint32_t linesWr, uint32_t scans, const char* path, boo
   if (fix) {
     snprintf(buf, sizeof(buf), "%.4f  %.4f", navLat, navLon);
     tft.drawString(wardFitTextWidth(buf, maxTextW), textX, rowY[2]);
+  } else if (linkNow == GpsLink::Silent) {
+    /* Names the pin, because that is the thing to check. GPIO 1 is also the
+     * console, which is why gpsPortOpen and gpsPortClose hand it over. */
+    tft.setTextColor(UI_WARN, UI_FG);
+    tft.drawString(wardFitTextWidth("No data on GPIO 1. Check GPS wiring.",
+                                    maxTextW),
+                   textX, rowY[2]);
+    tft.setTextColor(UI_DIM_TEXT, UI_FG);
+  } else if (linkNow == GpsLink::Stale) {
+    tft.setTextColor(UI_WARN, UI_FG);
+    tft.drawString(wardFitTextWidth("GPS data stopped. Check the cable.",
+                                    maxTextW),
+                   textX, rowY[2]);
+    tft.setTextColor(UI_DIM_TEXT, UI_FG);
   } else {
     tft.drawString("No fix yet", textX, rowY[2]);
   }
@@ -3856,7 +3940,16 @@ void session() {
         "epoch_ms,utc,date,lat,lon,alt_m,fix,sats,hdop,radio,ssid,bssid,ch,rssi_dbm,auth");
     logf.flush();
     if (!wardStartForegroundScanTask(logf)) {
-      if (wardWaitStartupFailureDismiss("Wardriver", "Could not start scan worker.")) {
+      /* The number, not just the symptom. A task stack needs a contiguous
+       * block, so the largest free block is what decided this, and the
+       * total free heap can look comfortable while no single block fits. */
+      char taskFail[128];
+      snprintf(taskFail, sizeof(taskFail),
+               "Could not start scan worker. Needs 10 KB in one block; "
+               "largest free is %u B of %u B free.",
+               (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
+               (unsigned)ESP.getFreeHeap());
+      if (wardWaitStartupFailureDismiss("Wardriver", taskFail)) {
         s_wardRetrySession = true;
       }
       logf.close();
