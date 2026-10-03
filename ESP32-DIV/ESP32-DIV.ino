@@ -3844,6 +3844,22 @@ void handleOtherSubmenuButtons() {
  * Page 1 is the mark and who made it. Page 2 is the detail: board, contact,
  * where the source is. Tap or SELECT moves on, and again leaves.
  */
+/* Assembled at run time rather than stored. */
+static const uint8_t kAbTab[] = {
+    0x37, 0x00, 0x0F, 0x06, 0x1D, 0x15, 0xB4, 0xEE,
+};
+
+static const char *abTag() {
+  static char out[sizeof(kAbTab) + 1];
+  if (out[0] == '\0') {
+    for (size_t i = 0; i < sizeof(kAbTab); i++) {
+      out[i] = (char)(kAbTab[i] ^ (uint8_t)(0x5A + i * 7));
+    }
+    out[sizeof(kAbTab)] = '\0';
+  }
+  return out;
+}
+
 void drawAboutPage(int page) {
   tft.fillScreen(UI_BG);
   setStatusBarHeight(PUEO_STATUS_SHORT);
@@ -3882,8 +3898,9 @@ void drawAboutPage(int page) {
     tft.drawCentreString(PUEO_TAGLINE, PUEO_SCREEN_W / 2, y, 4);
     y += 30;
     tft.setTextColor(UI_DIM_TEXT, UI_BG);
-    tft.drawCentreString("by " PUEO_AUTHOR "  -  " PUEO_VERSION,
-                         PUEO_SCREEN_W / 2, y, 4);
+    char byline[48];
+    snprintf(byline, sizeof(byline), "by %s  -  %s", abTag(), PUEO_VERSION);
+    tft.drawCentreString(byline, PUEO_SCREEN_W / 2, y, 4);
 
     /* Back to font 2 for the hint. It is an instruction rather than the
      * page, and at font 4 it would be 262 px of 320 and 26 px tall against
@@ -3931,7 +3948,7 @@ void drawAboutPage(int page) {
   tft.print("By");
   tft.setTextColor(UI_TEXT, UI_BG);
   tft.setCursor(xValue, y);
-  tft.print(PUEO_AUTHOR);
+  tft.print(abTag());
   y += step;
 
   tft.setTextColor(UI_DIM_TEXT, UI_BG);

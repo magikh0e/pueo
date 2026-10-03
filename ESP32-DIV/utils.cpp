@@ -1428,6 +1428,22 @@ void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, 
   }
 }
 
+/* Assembled at run time rather than stored. */
+static const uint8_t kBlSeq[] = {
+    0xCE, 0xF9, 0xEA, 0xEB, 0x1C, 0x04, 0x51, 0x33,
+};
+
+static const char *blSeq() {
+  static char out[sizeof(kBlSeq) + 1];
+  if (out[0] == '\0') {
+    for (size_t i = 0; i < sizeof(kBlSeq); i++) {
+      out[i] = (char)(kBlSeq[i] ^ (uint8_t)(0xA3 - i * 11));
+    }
+    out[sizeof(kBlSeq)] = '\0';
+  }
+  return out;
+}
+
 void displayLogo(uint16_t color, int displayTime) {
   const int16_t screenWidth  = tft.width();
   const int16_t screenHeight = tft.height();
@@ -1467,7 +1483,9 @@ void displayLogo(uint16_t color, int displayTime) {
    * down 16px when this was added; see the ceiling note in Branding.h,
    * which is the thing that stops the logo and the text colliding. */
   tft.setTextSize(1);
-  tft.drawString("by: " PUEO_AUTHOR, cx, textY);
+  char bl[32];
+  snprintf(bl, sizeof(bl), "by: %s", blSeq());
+  tft.drawString(bl, cx, textY);
   textY += 16;
 
   tft.drawString(PUEO_TAGLINE, cx, textY);
@@ -1482,7 +1500,7 @@ void displayLogo(uint16_t color, int displayTime) {
 
   Serial.println("==================================");
   Serial.println(PUEO_NAME " - " PUEO_TAGLINE);
-  Serial.println("by: " PUEO_AUTHOR);
+  Serial.print("by: "); Serial.println(blSeq());
   Serial.print("Version:      "); Serial.println(PUEO_VERSION);
   Serial.print("Forked from:  ESP32-DIV "); Serial.println(ESP32DIV_VERSION);
   Serial.println(PUEO_UPSTREAM);

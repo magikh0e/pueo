@@ -25,3 +25,6 @@ render/
 # IEEE registry cache for check_oui_registry.py: 3.8 MB, not ours,
 # and one command to fetch again.
 tools/.oui-cache.csv
+
+# Machine-local working notes, same reason as .publish.local above.
+*.local.md
