@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Centred text that is wider than the panel it is centred on.
+"""Centred text that is wider than the panel, where showLine draws it.
+
+Scope, because the title used to claim more than this does: showLine is the
+gauge's own line helper and SignalGauge.cpp is its only caller, 9 calls of
+which 4 resolve. Every other centred string on the device goes through
+tft.drawCentreString and is check_centre_fits.py's subject, 34 call sites
+across four files in fonts 1, 2 and 4. Reading this file's old first line
+and concluding that centred text was covered is how the About page came to
+be drawn in the smallest font on the device with nothing measuring it.
 
 TFT_eSPI does not clip. A string too wide for the screen is not truncated
 and does not wrap -- it is drawn anyway, running off both edges, and what
@@ -33,8 +41,12 @@ from check_text_pitch import calls, functions
 REPO = Path(__file__).resolve().parent.parent
 SKETCH = REPO / "ESP32-DIV"
 
-# (label, screen width, PUEO_BODY_SIZE) for each panel.
-PANELS = [('3.5"', 320, 2), ('2.8"', 240, 1)]
+# One panel, because there is one panel. shared.h defines 320x480
+# unconditionally: the 2.8" was dropped on 2026-09-26, so a 240 px entry here
+# could only ever fail a release over a board that cannot be built.
+# check_text_margins.py dropped its own copy at the time and this one was
+# missed, which left the two checks measuring different hardware.
+PANELS = [('3.5"', 320, 2)]
 
 FONT1_ADVANCE = 6
 
@@ -83,6 +95,71 @@ def fmt_width(fmt):
                 continue
             return None          # %s of unknown length, and the like
     return n
+
+
+# What characters each conversion can put on screen, for charging it in a
+# proportional font. Signed forms include the minus; the hex forms include
+# their own letter case and nothing else.
+CONV_CHARS = [
+    (r"%%", "%"),
+    (r"%\.(\d+)s", None),          # a precision, but of unknown characters
+    (r"%0?\d*l?x", "0123456789abcdef"),
+    (r"%0?\d*l?u", "0123456789"),
+    (r"%0?\d*l?[di]", "0123456789-"),
+    (r"%0?\d*l?X", "0123456789ABCDEF"),
+    (r"%[-0-9.]*f", "0123456789-."),
+]
+
+
+def fmt_pixels(fmt, font, size=1):
+    """Widest pixel width this format can draw in `font`, or None.
+
+    Walks the format the way fmt_width() does, so the two agree about what
+    is unknowable, but accumulates pixels: literal runs measured from the
+    font's own table, conversions charged at their widest possible
+    character.
+    """
+    import tft_fonts
+
+    total = 0
+    i = 0
+    while i < len(fmt):
+        if fmt[i] != "%":
+            w = tft_fonts.width(fmt[i], font, size)
+            if w is None:
+                return None
+            total += w
+            i += 1
+            continue
+
+        for pat, chars in CONV_CHARS:
+            m = re.compile(pat).match(fmt, i)
+            if not m:
+                continue
+            if chars is None:
+                return None      # %.Ns of characters this cannot know
+            # how many characters this conversion can produce, from the
+            # same table fmt_width() uses, so the two cannot disagree
+            n = fmt_width(m.group(0))
+            if n is None:
+                return None
+            per = tft_fonts.widest(chars, font, size)
+            if per is None:
+                return None
+            total += n * per
+            i = m.end()
+            break
+        else:
+            m = re.compile(r"%[-0-9.]*l?[a-zA-Z]").match(fmt, i)
+            if not m:
+                w = tft_fonts.width(fmt[i], font, size)
+                if w is None:
+                    return None
+                total += w
+                i += 1
+                continue
+            return None          # %s of unknown length, and the like
+    return total
 
 
 def literal(arg):

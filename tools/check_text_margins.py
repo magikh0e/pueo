@@ -18,9 +18,25 @@ lost the channel off every row, Hunt's lost the age, and AP Tracker's
 empty-list message lost the end of both its lines. All four were in features
 somebody had used.
 
-The arithmetic is check_text_fits.py's: font 1 advances 6 px per character
-whatever the glyph, so the width is 6 * size * length, and the format at its
-widest is what has to fit.
+The arithmetic is pixels, per font. Font 1 advances 6 px per character
+whatever the glyph, so there a width is 6 * size * length. Fonts 2 and 4 are
+proportional, 3 to 10 px and 1 to 25 px respectively, so a character count
+is not a width at all and tft_fonts.py reads the tables out of the TFT_eSPI
+zip that ships in the release archive. A format is charged its literal runs
+measured plus each conversion at the widest character that conversion can
+produce, which is neither the font's widest glyph, 25 px in font 4 and
+enough to fail every line on the device, nor the width of a digit, since
+font 4's uppercase hex reaches 18 px against a digit's 14 and charging a
+digit for %X under-measures a MAC by 48 px.
+
+This measured font 1 only until 0.4.28, and the gap was not the obvious half.
+setTextFont's argument was resolved with int() behind a digit regex, so
+setTextFont(PUEO_BODY_FONT) gave None and the caller then assumed font 1:
+nineteen call sites that draw in font 2 were measured at 6 px per character,
+about a quarter narrow, in the direction that passes a line which overruns.
+Nothing overran, which is luck rather than a result. The font numbers now
+come from shared.h so renumbering the constant cannot leave this agreeing
+with an old value.
 
     python tools/check_text_margins.py
 
@@ -38,6 +54,19 @@ through before it was closed:
                 set no size measured 14 of 188 and reported green over the
                 bug this exists for. A function that sets none inherits from
                 its callers when they agree; if they do not, it is skipped.
+
+                Except for a proportional font, where no size set means 1.
+                That is TFT_eSPI's default and setTextSize is only called to
+                depart from it, and of the call sites where both font and
+                size resolve, font 2 is size 1 at all 29 of them. Font 1
+                appears at 1, 2 and 3, so the same assumption there would be
+                a guess: PUEO_BODY_SIZE is 2 and multiplies font 1, never
+                font 2.
+
+  the font      Explicit literal, a #define read from shared.h, or an
+                argument on the call itself. Fonts 6, 7 and 8 are skipped:
+                they are the gauge's digit-and-colon faces, no table is
+                loaded for them, and a guess would be an invented width.
 
   the x         Written as an offset from the right edge, PUEO_SCREEN_W - N,
                 through a constexpr. Requiring a literal skipped exactly the
@@ -76,7 +105,9 @@ import re
 import sys
 from pathlib import Path
 
-from check_text_fits import FONT1_ADVANCE, fmt_width, literal, snprintf_fmt
+import tft_fonts
+from check_text_fits import (FONT1_ADVANCE, fmt_pixels, fmt_width, literal,
+                             snprintf_fmt)
 from check_text_pitch import calls, functions
 
 REPO = Path(__file__).resolve().parent.parent
@@ -94,6 +125,28 @@ PANELS = [('3.5"', 320, 2)]
 LEFT_DATUM = ("TL_DATUM", "ML_DATUM", "BL_DATUM")
 
 NUM = re.compile(r"^-?\d+$")
+
+
+def font_macros():
+    """Font numbers reachable through a #define, from shared.h.
+
+    setTextFont(PUEO_BODY_FONT) used to resolve to None, and the caller then
+    assumed font 1 and measured at 6 px per character. PUEO_BODY_FONT is 2:
+    proportional, and measured that way nineteen call sites came out about a
+    quarter narrow, which is the direction that passes an overrun.
+
+    Read rather than written down, so renumbering the constant cannot leave
+    this agreeing with an old value.
+    """
+    src = (SKETCH / "shared.h").read_text(encoding="utf-8", errors="replace")
+    out = {}
+    for m in re.finditer(r"^#define\s+(\w*FONT\w*)\s+(\d+)\s*$",
+                         src, re.M):
+        out[m.group(1)] = int(m.group(2))
+    return out
+
+
+FONT_MACROS = font_macros()
 
 # The right-hand side is an expression, not a literal: a column placed as an
 # offset from the right edge is written PUEO_SCREEN_W - 104.
@@ -202,7 +255,23 @@ def expr_width(expr, strs):
             best = cand
     if best is None:
         return None
-    return len(best), '"%s"' % best
+    return ("literal", best, '"%s"' % best)
+
+
+def width_px(cand, font, size):
+    """Pixels a candidate can draw at its widest, or None.
+
+    The unit is pixels rather than characters because a count means nothing
+    across fonts: font 1 advances 6 px per glyph, font 2 runs 3 to 10 and
+    font 4 runs 1 to 25. tft_fonts reads the tables out of the TFT_eSPI zip
+    that ships in the release archive.
+    """
+    kind, payload, _how = cand
+    if kind == "literal":
+        return tft_fonts.width(payload, font, size)
+    if kind == "format":
+        return fmt_pixels(payload, font, size)
+    return None
 
 
 def params_of(src, fname):
@@ -248,7 +317,12 @@ def state_before(body, off, body_size):
     datum = None
     for _, args in calls(head, "setTextFont"):
         a = args[0].strip() if args else ""
-        font = int(a) if NUM.match(a) else None
+        if NUM.match(a):
+            font = int(a)
+        elif a in FONT_MACROS:
+            font = FONT_MACROS[a]
+        else:
+            font = None
     for _, args in calls(head, "setTextDatum"):
         a = args[0].strip() if args else ""
         datum = a in LEFT_DATUM
@@ -283,7 +357,7 @@ def inherited_sizes(funcs, body_size):
     return out
 
 
-def param_width(src, funcs, strs, fname, var):
+def param_width(src, funcs, strs, fname, var, font, size):
     """Width of a parameter, from every call site one level up.
 
     drawRow(y, "Joined", buf, colour) is the whole point of a row helper: the
@@ -324,16 +398,22 @@ def param_width(src, funcs, strs, fname, var):
             got = expr_width(arg, strs)
             if got is None:
                 fmt = snprintf_fmt(cbody[:off], arg)
-                n = fmt_width(fmt) if fmt is not None else None
-                if n is None:
+                if fmt is None:
                     unknown += 1
                     continue
-                got = (n, '"%s" at its widest' % fmt)
-            if best is None or got[0] > best[0]:
-                best = got
+                got = ("format", fmt, '"%s" at its widest' % fmt)
+            # Widest in pixels, not longest in characters. In a proportional
+            # font those are different questions and this is asking the one
+            # that decides whether the line fits.
+            px = width_px(got, font, size)
+            if px is None:
+                unknown += 1
+                continue
+            if best is None or px > best[0]:
+                best = (px, got)
     if best is None:
         return None
-    return best[0], best[1], unknown
+    return best[0], best[1][2], unknown
 
 
 def main():
@@ -373,14 +453,28 @@ def main():
                     if font is None:
                         font = 1
                         assumed.add("font 1 where the function set none")
-                    if font != 1:
-                        skip("an explicit font that is not 1")
+                    if not tft_fonts.known(font):
+                        # 6, 7 and 8 are the gauge's digit-and-colon faces.
+                        # No table is loaded for them and a guess would be
+                        # an invented width.
+                        skip("font %d, which has no width table" % font)
                         continue
                     if size is None:
                         size = inherit[panel].get(fname)
                         if size is not None:
                             assumed.add("the size this function's callers "
                                         "set, where it sets none")
+                    if size is None and font != 1:
+                        # A proportional font with no size set is size 1.
+                        # Not a guess: it is TFT_eSPI's default, and of the
+                        # call sites where both resolve, font 2 is size 1 at
+                        # all 29 of them. Font 1 appears at 1, 2 and 3, which
+                        # is why this does not apply to it: PUEO_BODY_SIZE is
+                        # 2 and multiplies font 1, never font 2.
+                        size = 1
+                        assumed.add("size 1 for a proportional font whose "
+                                    "size nothing sets, which is the "
+                                    "library default")
                     if size is None:
                         skip("size set neither here nor by any caller")
                         continue
@@ -393,22 +487,21 @@ def main():
                         skip("x does not resolve to a number")
                         continue
 
+                    px = None
                     got = expr_width(text, strs)
                     if got is None:
                         var = text.strip()
                         fmt = snprintf_fmt(body[:off], var)
                         if fmt is not None:
-                            n = fmt_width(fmt)
-                            if n is None:
-                                skip("format can produce any width")
-                                continue
-                            got = (n, '"%s" at its widest' % fmt)
+                            got = ("format", fmt,
+                                   '"%s" at its widest' % fmt)
                         else:
-                            traced = param_width(src, funcs, strs, fname, var)
+                            traced = param_width(src, funcs, strs, fname,
+                                                 var, font, size)
                             if traced is None:
                                 skip("text is a variable this cannot trace")
                                 continue
-                            got = traced[:2]
+                            px, how = traced[0], traced[1]
                             assumed.add("the widest thing any caller passes, "
                                         "for text that is a parameter")
                             if traced[2]:
@@ -416,14 +509,19 @@ def main():
                                     "that no unresolved caller passes "
                                     "something wider (%d such call site(s))"
                                     % traced[2])
-                    n, how = got
+                    if px is None:
+                        how = got[2]
+                        px = width_px(got, font, size)
+                        if px is None:
+                            skip("a width this font cannot be asked for")
+                            continue
 
                     measured += 1
-                    end = x + n * FONT1_ADVANCE * size
+                    end = x + px
                     if end > width:
                         problems.append(
                             ("%s:%s()" % (path.name, fname), line, panel,
-                             x, end, width, how))
+                             x, end, width, how, font))
 
     print("left-aligned strings measured: %d" % measured)
     for why, n in sorted(skipped.items(), key=lambda kv: -kv[1]):
@@ -443,7 +541,7 @@ def main():
         print("every one of them ends before the right edge.")
         return 0
 
-    for where, line, panel, x, end, width, how in problems:
+    for where, line, panel, x, end, width, how, font in problems:
         print("  %-34s line %-5d %s  x=%d ends at %d, panel is %d"
               % (where, line, panel, x, end, width))
         print("  %-34s %s" % ("", how))

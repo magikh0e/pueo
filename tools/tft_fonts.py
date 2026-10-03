@@ -108,6 +108,26 @@ def width(text, font, size=1):
     return total * size
 
 
+def widest(chars, font, size=1):
+    """Width of the widest of `chars` in `font`, or None if one is outside it.
+
+    For charging a printf conversion. A numeric conversion produces digits,
+    and in font 2 every digit is 8 px and no hex letter or sign is wider, so
+    a character count would have done. In font 4 it would not: digits are
+    14 px while uppercase hex runs to 18, so charging a digit for %X
+    under-measures a MAC address by 48 px, which is the direction that
+    passes a line running off the panel.
+    """
+    best = 0
+    for ch in chars:
+        w = width(ch, font, size)
+        if w is None:
+            return None
+        if w > best:
+            best = w
+    return best
+
+
 def main():
     print("glyph widths, from Libraries/TFT_eSPI-master.zip")
     print()
