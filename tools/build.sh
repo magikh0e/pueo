@@ -253,8 +253,25 @@ setup() {
 # compiler, which today is the backslashed C: form.
 prefix_maps() {
   local flags="" root tag win mixed
-  for root in "$REPO" "$PUEO_ARDUINO_ROOT"; do
-    if [ "$root" = "$REPO" ]; then tag="pueo"; else tag="arduino"; fi
+  # $BUILD_PATH last, after $PUEO_ARDUINO_ROOT which contains it.
+  #
+  # The build path reaches the ELF through the debug info, and the ELF's
+  # SHA-256 is in the app descriptor, so two trees building identical source
+  # at different paths produce images that differ in 64 bytes. That used not
+  # to matter because every tree built into build-$PUEO_ROLE; it matters now
+  # that each tree has its own. Mapping the root alone is not enough, since
+  # the part of the path that differs comes after it.
+  #
+  # Last, not first: gcc applies the last matching -ffile-prefix-map, which
+  # is why listing it first left arduinouild-detector-<hash>\sketch\... in
+  # the debug info. Established by looking in the ELF, not by reading the
+  # manual.
+  for root in "$REPO" "$PUEO_ARDUINO_ROOT" "$BUILD_PATH"; do
+    case "$root" in
+      "$BUILD_PATH") tag="build" ;;
+      "$REPO") tag="pueo" ;;
+      *) tag="arduino" ;;
+    esac
     win="$(cygpath -w "$root" 2>/dev/null || echo "$root")"
     mixed="$(cygpath -m "$root" 2>/dev/null || echo "$root")"
     flags="$flags -ffile-prefix-map=$win=$tag"
