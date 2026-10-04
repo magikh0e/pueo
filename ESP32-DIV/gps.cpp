@@ -261,7 +261,16 @@ uint32_t lastNavMs = 0;
 /* 5 s of silence from a freshly opened port is a module that is not there.
  * A GPS emits its first sentence within about a second of power, long
  * before it can fix. 8 s for one that was talking and stopped, which is the
- * figure the Satellites screen already used for GSV. */
+ * figure the Satellites screen already used for GSV.
+ *
+ * Silent is confirmed with no module fitted: the Satellites screen shows
+ * "no GPS" and Wardrive's card shows NONE with the GPIO 1 line. Those are
+ * separate paths sharing only gpsLinkState(), so that is two results.
+ *
+ * The 5000 itself is not confirmed by that, and should not be read as
+ * though it were. No module has been timed from power to first sentence.
+ * One slower than five seconds would show NONE at startup and look exactly
+ * like a wiring fault, which is the failure this number can still cause. */
 constexpr uint32_t kGpsSilentMs = 5000;
 constexpr uint32_t kGpsStaleMs = 8000;
 
