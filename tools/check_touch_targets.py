@@ -22,12 +22,36 @@ Reads source; needs no board.
 
 What is checked
 ---------------
-Any `button_x2`, `button_y2` or equivalent literal that exceeds the panel, or
-that stops short of it by more than a plausible margin. Short of it is the
-interesting direction: too wide is clipped by the touch driver and costs
-nothing, while too narrow is a strip of screen that looks live and is not.
+Any `button_x2` or `button_y2` that exceeds the panel, or that stops short of
+it by more than a plausible margin, plus the submenu grid's own extent
+computed from the GRID_* constants. Short of it is the interesting
+direction: too wide is clipped by the touch driver and costs nothing, while
+too narrow is a strip of screen that looks live and is not.
+
+The third failure, which was this check's own
+---------------------------------------------
+It used to require a literal integer, and it spent a release matching
+nothing. The list menus it was written for became tile grids with a shared
+gridHit(), `button_x2 = 220` became `button_x2 = x_position + TILE_W`, and
+the regex stopped seeing anything. Both its assertions are of the form
+`not bad_x`, which is true of an empty list, so it printed "every row hit box
+spans the panel" and "2 checks passed" having examined zero sites.
+
+Two things follow, and the second is the one worth copying into other checks.
+
+It resolves expressions now, against the integer constants the sketch
+declares, because that is how the code is written.
+
+And it counts what it measured, prints that count, and fails below a floor.
+Not a zero test: renaming `button_x2` away took it from three horizontal
+boxes to one, and one is not zero, so a zero test would have passed that
+too. Losing most of the subject is the same failure as losing all of it and
+harder to see. EXPECT_X and EXPECT_Y are deliberate numbers; when a menu
+changes shape they want changing, after looking at what replaced it.
 """
 import io
+import ast
+import operator
 import re
 import sys
 from pathlib import Path
@@ -76,25 +100,115 @@ def strip_comments(src):
     return "".join(out)
 
 
+# Named integer constants the sketch declares, so a hit box written as an
+# expression can be evaluated. `const int TILE_W = 145;` and
+# `static constexpr int GRID_TILE_W = (PUEO_SCREEN_W - ...) / GRID_COLS;`
+# are both this.
+DECL = re.compile(
+    r"^\s*(?:static\s+)?(?:const|constexpr)\s+(?:const\s+)?int\s+"
+    r"(\w+)\s*=\s*([^;]+);", re.M)
+
+ARITH = {ast.Add: operator.add, ast.Sub: operator.sub,
+         ast.Mult: operator.mul, ast.FloorDiv: operator.floordiv,
+         ast.Div: operator.floordiv}
+
+
+def _arith(node, env):
+    if isinstance(node, ast.Expression):
+        return _arith(node.body, env)
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return node.value
+    if isinstance(node, ast.Name):
+        return env.get(node.id)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        v = _arith(node.operand, env)
+        return None if v is None else -v
+    if isinstance(node, ast.BinOp) and type(node.op) in ARITH:
+        a, b = _arith(node.left, env), _arith(node.right, env)
+        if a is None or b is None:
+            return None
+        if type(node.op) in (ast.FloorDiv, ast.Div) and b == 0:
+            return None
+        return ARITH[type(node.op)](a, b)
+    return None
+
+
+def value_of(expr, env):
+    """An integer, or None when something in it is not known."""
+    try:
+        tree = ast.parse(expr.strip().replace("/", "//"), mode="eval")
+    except SyntaxError:
+        return None
+    return _arith(tree, env)
+
+
+def constants(src, seed):
+    """Resolve the sketch's int constants, repeating until nothing new."""
+    env = dict(seed)
+    pending = DECL.findall(src)
+    for _ in range(8):
+        moved = False
+        for name, expr in pending:
+            if name in env:
+                continue
+            v = value_of(expr, env)
+            if v is not None:
+                env[name] = v
+                moved = True
+        if not moved:
+            break
+    return env
+
+
 def main():
     print("panel %dx%d, %.3f mm per pixel, finger minimum %.0f mm = %.0f px"
           % (W, H, MM_PER_PX, FINGER_MM, FINGER_MM / MM_PER_PX))
     print()
 
     bad_x, bad_y, narrow = [], [], []
+    seen_x = seen_y = 0
+    unresolved = []
+    seed = {"PUEO_SCREEN_W": W, "PUEO_SCREEN_H": H}
     for p in sorted(SKETCH.glob("*.ino")) + sorted(SKETCH.glob("*.cpp")):
         src = strip_comments(p.read_text(encoding="utf-8", errors="replace"))
-        for m in re.finditer(r"\bbutton_x2\s*=\s*(\d+)\s*;", src):
-            v = int(m.group(1))
+        env = constants(src, seed)
+        # x_position and y_position are loop locals, and the widest value
+        # either takes is the far column or the last row. Both are built
+        # from constants, so the extremes are resolvable.
+        env.setdefault("x_position", max(
+            (v for k, v in env.items() if k.startswith("X_OFFSET")),
+            default=None))
+        # y_position is Y_START + row * Y_SPACING, and the row that can run
+        # off the bottom is the last one. The item count and the column
+        # count give it.
+        if all(k in env for k in
+               ("Y_START", "Y_SPACING", "other_NUM_SUBMENU_ITEMS",
+                "OTHER_GRID_COLS")) and env["OTHER_GRID_COLS"]:
+            rows = -(-env["other_NUM_SUBMENU_ITEMS"] //
+                     env["OTHER_GRID_COLS"])
+            env.setdefault("y_position",
+                           env["Y_START"] + (rows - 1) * env["Y_SPACING"])
+        for m in re.finditer(r"\bbutton_x2\s*=\s*([^;]+);", src):
             ln = src[:m.start()].count("\n") + 1
+            v = value_of(m.group(1), env)
+            if v is None:
+                unresolved.append((p.name, ln, "button_x2",
+                                   m.group(1).strip()))
+                continue
+            seen_x += 1
             if v > W:
                 bad_x.append((p.name, ln, v, "past the right edge"))
             elif v < W - 40:
                 bad_x.append((p.name, ln, v,
                               "%d px of every row is dead" % (W - v)))
-        for m in re.finditer(r"\bbutton_y2\s*=\s*(\d+)\s*;", src):
-            v = int(m.group(1))
+        for m in re.finditer(r"\bbutton_y2\s*=\s*([^;]+);", src):
             ln = src[:m.start()].count("\n") + 1
+            v = value_of(m.group(1), env)
+            if v is None:
+                unresolved.append((p.name, ln, "button_y2",
+                                   m.group(1).strip()))
+                continue
+            seen_y += 1
             if v > H:
                 bad_y.append((p.name, ln, v, "past the bottom edge"))
         # row pitch, where a list spaces its items by a literal
@@ -103,6 +217,47 @@ def main():
             ln = src[:m.start()].count("\n") + 1
             if v * MM_PER_PX < FINGER_MM:
                 narrow.append((p.name, ln, v, v * MM_PER_PX))
+
+    # The submenu grid, which is where a wrong extent would live now that
+    # the list menus are gone. gridTileXY puts tile i at
+    # GAP + col*(W+GAP), and the far column is the one that can fall short
+    # of the panel or run past it.
+    ino = strip_comments(
+        (SKETCH / "ESP32-DIV.ino").read_text(encoding="utf-8",
+                                             errors="replace"))
+    g = constants(ino, seed)
+    need = ("GRID_COLS", "GRID_ROWS", "GRID_TILE_W", "GRID_TILE_H",
+            "GRID_GAP_X", "GRID_GAP_Y", "GRID_Y0")
+    if all(k in g for k in need):
+        right = g["GRID_GAP_X"] + (g["GRID_COLS"] - 1) * (
+            g["GRID_TILE_W"] + g["GRID_GAP_X"]) + g["GRID_TILE_W"]
+        bottom = g["GRID_Y0"] + (g["GRID_ROWS"] - 1) * (
+            g["GRID_TILE_H"] + g["GRID_GAP_Y"]) + g["GRID_TILE_H"]
+        seen_x += 1
+        seen_y += 1
+        if right > W:
+            bad_x.append(("ESP32-DIV.ino", 0, right,
+                          "the grid's far column runs past the panel"))
+        elif right < W - 40:
+            bad_x.append(("ESP32-DIV.ino", 0, right,
+                          "%d px to the right of the grid is dead"
+                          % (W - right)))
+        if bottom > H:
+            bad_y.append(("ESP32-DIV.ino", 0, bottom,
+                          "the grid's last row runs off the bottom"))
+        tile_mm = min(g["GRID_TILE_W"], g["GRID_TILE_H"]) * MM_PER_PX
+        if tile_mm < FINGER_MM:
+            narrow.append(("ESP32-DIV.ino", 0,
+                           min(g["GRID_TILE_W"], g["GRID_TILE_H"]), tile_mm))
+    else:
+        unresolved.append(("ESP32-DIV.ino", 0, "the grid",
+                           "GRID_* constants did not resolve"))
+
+    print("  hit boxes measured: %d horizontal, %d vertical"
+          % (seen_x, seen_y))
+    for name, ln, what, expr in unresolved:
+        print("    unresolved  %-18s:%-5d %s = %s" % (name, ln, what, expr))
+    print()
 
     for f, ln, v, why in bad_x:
         print("    %-18s:%-5d button_x2 = %-5d %s" % (f, ln, v, why))
@@ -136,7 +291,27 @@ def main():
         print("does not move when the panel does, and nothing on screen looks")
         print("wrong when it is stale.")
         return 1
-    print("%d checks passed" % CHECKS)
+    # A floor, not a zero test. Renaming button_x2 away took this from
+    # three horizontal boxes to one and it still passed, because one is not
+    # zero. Losing most of the subject is the same failure as losing all of
+    # it, only harder to see. These numbers are deliberate: when a menu
+    # changes shape, change them, having first looked at what replaced it.
+    EXPECT_X, EXPECT_Y = 3, 3
+    if seen_x < EXPECT_X or seen_y < EXPECT_Y:
+        print()
+        print("FAIL: this measured %d horizontal and %d vertical hit box(es),"
+              % (seen_x, seen_y))
+        print("      and expected at least %d and %d." % (EXPECT_X, EXPECT_Y))
+        print("      Both assertions above are over an empty list, so they")
+        print("      are true for want of anything to be false about.")
+        print()
+        print("      That is how this check spent a release reporting green:")
+        print("      it wanted a literal, the hit boxes became expressions")
+        print("      over TILE_W, and nothing said it had lost its subject.")
+        print("      Whatever replaced them needs teaching to this scan.")
+        return 1
+
+    print("%d checks passed, over %d hit box(es)" % (CHECKS, seen_x + seen_y))
     return 0
 
 
