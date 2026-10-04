@@ -18,7 +18,7 @@
  * upstream's release this was forked from -- showing that on the splash
  * would claim to be an ESP32-DIV build it no longer is. Both appear in the
  * serial banner, which is the honest way round. */
-#define PUEO_VERSION     "0.4.31"
+#define PUEO_VERSION     "0.4.32"
 
 #define PUEO_NAME        "Pueo"
 #define PUEO_TAGLINE     "multi-radio field tool"
