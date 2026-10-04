@@ -263,7 +263,7 @@ prefix_maps() {
   # the part of the path that differs comes after it.
   #
   # Last, not first: gcc applies the last matching -ffile-prefix-map, which
-  # is why listing it first left arduinouild-detector-<hash>\sketch\... in
+  # is why listing it first left arduino\build-detector-<hash>\sketch\... in
   # the debug info. Established by looking in the ELF, not by reading the
   # manual.
   for root in "$REPO" "$PUEO_ARDUINO_ROOT" "$BUILD_PATH"; do
