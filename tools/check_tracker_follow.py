@@ -18,6 +18,35 @@ the reason this file exists.
 
     python tools/check_tracker_follow.py
 """
+# This check does not read the firmware: it reimplements the code below and
+# tests the reimplementation, so a change to the C cannot fail it. Proved on
+# check_spotter_merge.py, where removing the under-reporting guard its own
+# docstring exists to protect left it passing.
+#
+# The function bodies are pinned by hash and the transcribed constants are
+# compared by value, which is the better report of the two: it can name the
+# constant that moved. Neither can tell you the transcription is correct.
+# Re-pin only after reading the C and bringing the Python into line.
+from transcript_guard import guard, guard_consts
+
+guard("TrackerFollow.cpp", "sighting", "309d8b9458810aea")
+guard("TrackerFollow.cpp", "pickLane", "34654bbc523fd27c")
+guard("TrackerFollow.cpp", "lookUp", "a916b2805b07b25d")
+guard("TrackerFollow.cpp", "qualifiesByRate",
+      "672d4700c25b7890")
+guard_consts("TrackerFollow.h", {
+    "kLaneWidthDb": 6,
+    "kMaxLanes": 8,
+    "kGapToleranceMs": 20000,
+    "kLaneIdleMs": 120000,
+    "kIdentityMs": 300000,
+    "kSeenSlots": 64,
+    "kChurnWindowMs": 60000,
+    "kChurnSlots": 48,
+    "kIdentityMinSightings": 3,
+    "kMsPerIdentity": 240000,
+})
+
 import random
 
 # ── constants, transcribed from TrackerFollow.h ────────────────────────────

@@ -114,6 +114,51 @@ def guard(filename, func, pinned, what=""):
         sys.exit(1)
 
 
+def guard_consts(filename, pairs):
+    """Fail when a transcribed constant no longer matches the C.
+
+    The function bodies are pinned by hash, which says something moved
+    without saying what. A constant can do better: it has a name and a
+    value, so the report can name the one that drifted and give both
+    numbers. check_tracker_follow transcribes ten of them out of a header
+    and check_sub_parse two, and a transcription that silently keeps an old
+    frequency bound is wrong in a way no hash of a function body would
+    catch.
+
+    pairs is {C name: value the Python is using}.
+    """
+    path = SKETCH / filename
+    if not path.is_file():
+        print("FAIL: %s is gone, and constants were transcribed from it."
+              % filename)
+        sys.exit(1)
+    src = io.open(path, encoding="utf-8", errors="replace").read()
+
+    bad, absent = [], []
+    for name, want in sorted(pairs.items()):
+        m = re.search(
+            r"\b%s\b\s*=\s*(-?[0-9]+)" % re.escape(name), src)
+        if not m:
+            absent.append(name)
+            continue
+        got = int(m.group(1))
+        if got != want:
+            bad.append((name, want, got))
+
+    if absent or bad:
+        print("FAIL: transcribed constants no longer match %s." % filename)
+        for name in absent:
+            print("    %-24s not declared there any more" % name)
+        for name, want, got in bad:
+            print("    %-24s transcribed as %s, is now %s"
+                  % (name, want, got))
+        print()
+        print("      This check reimplements the algorithm these belong to")
+        print("      and tests the reimplementation, so it would otherwise")
+        print("      go on passing against the old numbers.")
+        sys.exit(1)
+
+
 def main():
     """Print the current digest of each argument pair, for pinning."""
     args = sys.argv[1:]

@@ -250,7 +250,7 @@ def main():
         # lookahead is what makes a spelling match only when it is the whole
         # number rather than the start of a longer one.
         stale = [w for n, w in WORDS.items() if n != total
-                 and re.search(w + r"(?!\s+and)", html, re.I)]
+                 and re.search(w + r"\b(?!\s+and\b)", html, re.I)]
         ok("  and no longer says an older one", not stale,
            "it also says %s, so one of the two is wrong" % stale)
 

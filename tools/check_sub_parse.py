@@ -13,6 +13,23 @@ refused by name.
 
     python tools/check_sub_parse.py
 """
+# This check does not read the firmware: it reimplements the code below and
+# tests the reimplementation, so a change to the C cannot fail it. Proved on
+# check_spotter_merge.py, where removing the under-reporting guard its own
+# docstring exists to protect left it passing.
+#
+# The function bodies are pinned by hash and the transcribed constants are
+# compared by value, which is the better report of the two: it can name the
+# constant that moved. Neither can tell you the transcription is correct.
+# Re-pin only after reading the C and bringing the Python into line.
+from transcript_guard import guard, guard_consts
+
+guard("SubFile.cpp", "parse", "d728c63cd9188ee9")
+guard_consts("SubFile.cpp", {
+    "kFreqMinHz": 280000000,
+    "kFreqMaxHz": 960000000,
+})
+
 OK = "Ok"
 NOT_SUB = "NotSubFile"
 RAW = "RawUnsupported"

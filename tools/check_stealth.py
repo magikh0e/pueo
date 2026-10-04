@@ -334,7 +334,7 @@ def check_docs():
            re.search(r"%s features" % word, html) is not None,
            "no page says %r" % ("%s features" % word))
         stale = [w for k, w in WORDS.items() if k != n
-                 and re.search(r"%s features" % w, html)]
+                 and re.search(r"%s features\b" % w, html)]
         ok("  and no page says an older one", not stale,
            "a page also says %s" % stale)
 
