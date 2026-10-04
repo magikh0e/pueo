@@ -53,6 +53,19 @@ class Table:
         return h
 
 
+# This check does not read the firmware: it reimplements findOrAdd() below
+# and tests the reimplementation. Dropping both locally-administered tests
+# from the real one, which is the under-reporting bug this exists to
+# prevent, left this printing "16 merge rules hold" and exiting 0.
+#
+# So the C is pinned. This cannot tell you the transcription is right; it
+# stops it being wrong without anyone knowing. Re-pin only after reading the
+# function and bringing the Python into line.
+from transcript_guard import guard
+
+guard("Spotter.cpp", "findOrAdd", "2795a552285984fd")
+
+
 def rnd(n):
     """A locally administered address: bit 0x02 of the first octet set."""
     return bytes([0x02 | (n & 0xF0), 0x11, 0x22, 0x33, 0x44, n & 0xFF])

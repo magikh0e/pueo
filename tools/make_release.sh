@@ -159,6 +159,7 @@ INCLUDE=(
   "tools/check_nav_labels.py"
   "tools/check_settings.py"
   "tools/check_settings_documented.py"
+  "tools/transcript_guard.py"
   "tools/check_stealth.py"
   "tools/check_render_sync.py"
   "tools/check_text_pitch.py"

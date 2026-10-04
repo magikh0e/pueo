@@ -19,6 +19,18 @@ what the code does; it cannot tell you the bit numbers are right.
 
     python tools/check_airtag_parse.py
 """
+# This check does not read the firmware: it reimplements the function(s)
+# below and tests the reimplementation, so a change to the C cannot fail it.
+# Proved on check_spotter_merge.py, where removing the under-reporting guard
+# its own docstring exists to protect left it passing.
+#
+# So the C is pinned. This cannot tell you the transcription is right; it
+# stops it being wrong without anyone knowing. Re-pin only after reading the
+# function and bringing the Python into line.
+from transcript_guard import guard
+
+guard("bluetooth.cpp", "parseAppleAdv", "8fd758d225166721")
+
 HIT_FIND_MY = 0
 HIT_NEW_AT = 1
 HIT_NEARBY = 2

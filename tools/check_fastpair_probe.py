@@ -15,6 +15,19 @@ indistinguishable from a fleet of secure devices.
 
     python tools/check_fastpair_probe.py
 """
+# This check does not read the firmware: it reimplements the function(s)
+# below and tests the reimplementation, so a change to the C cannot fail it.
+# Proved on check_spotter_merge.py, where removing the under-reporting guard
+# its own docstring exists to protect left it passing.
+#
+# So the C is pinned. This cannot tell you the transcription is right; it
+# stops it being wrong without anyone knowing. Re-pin only after reading the
+# function and bringing the Python into line.
+from transcript_guard import guard
+
+guard("FastPairProbe.cpp", "parseResponse", "1c54478f5429e68f")
+guard("FastPairProbe.cpp", "buildRequest", "97d3cfdbf530d4b7")
+
 MSG_REQUEST = 0x00
 MSG_RESPONSE = 0x01
 

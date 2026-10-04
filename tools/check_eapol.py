@@ -16,6 +16,19 @@ the C encodes is right.
 
     python tools/check_eapol.py
 """
+# This check does not read the firmware: it reimplements the function(s)
+# below and tests the reimplementation, so a change to the C cannot fail it.
+# Proved on check_spotter_merge.py, where removing the under-reporting guard
+# its own docstring exists to protect left it passing.
+#
+# So the C is pinned. This cannot tell you the transcription is right; it
+# stops it being wrong without anyone knowing. Re-pin only after reading the
+# function and bringing the Python into line.
+from transcript_guard import guard
+
+guard("Eapol.cpp", "classify", "da88fb833947342c")
+guard("Eapol.cpp", "findPayload", "c1704ad9d80eb612")
+
 TYPE_DATA = 0x02
 SUBTYPE_QOS = 0x08
 SUBTYPE_NULL = 0x04
