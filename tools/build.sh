@@ -40,7 +40,45 @@ case "$PUEO_ROLE" in
   *) echo "PUEO_ROLE must be detector or beacon, not '$PUEO_ROLE'" >&2; exit 2 ;;
 esac
 
-BUILD_PATH="$PUEO_ARDUINO_ROOT/build-$PUEO_ROLE"
+# Keyed on the tree, not just the role.
+#
+# This was build-$PUEO_ROLE alone, so every checkout built into the same
+# directory and a release verification overwrote the working tree's build.
+# The hash is of the resolved repo path, so trees cannot collide and each
+# keeps its own incremental build across a verify.
+_pueo_tree_id() {
+  if command -v md5sum >/dev/null 2>&1; then
+    printf '%s' "$REPO" | md5sum | cut -c1-8
+  else
+    printf '%s' "$REPO" | cksum | cut -d' ' -f1
+  fi
+}
+BUILD_PATH="$PUEO_ARDUINO_ROOT/build-$PUEO_ROLE-$(_pueo_tree_id)"
+
+# Each build directory records the tree it belongs to, and claiming one
+# clears out any whose tree has gone. The verify tree is deleted after every
+# release, so without this each verify would strand a directory for good.
+#
+# The record is a sibling file, not something inside the build directory.
+# It was inside at first and arduino-cli deleted it: --build-path is wiped
+# on a full rebuild, so the marker survived an incremental build and
+# vanished exactly when a rebuild happened. That made the pruning quietly
+# stop working for whichever tree had most recently rebuilt.
+_pueo_claim_build() {
+  local sidecar tree dir
+  for sidecar in "$PUEO_ARDUINO_ROOT"/build-*.tree; do
+    [ -f "$sidecar" ] || continue     # no match, or not ours to judge
+    tree="$(cat "$sidecar" 2>/dev/null)"
+    dir="${sidecar%.tree}"
+    if [ -n "$tree" ] && [ ! -d "$tree" ]; then
+      # and the warnings pass's directory, which arduino-cli makes from
+      # $BUILD_PATH-warnings and which has no sidecar of its own
+      rm -rf "$dir" "$dir-warnings" "$sidecar"
+    fi
+  done
+  mkdir -p "$PUEO_ARDUINO_ROOT"
+  printf '%s\n' "$REPO" > "$BUILD_PATH.tree"
+}
 
 # The beacon includes the detector's headers rather than copying the
 # constants it has to match. arduino-cli compiles a sketch from a staging
@@ -267,6 +305,7 @@ compile() {
   local log="$PUEO_ARDUINO_ROOT/compile.log"
   mkdir -p "$PUEO_ARDUINO_ROOT"
   local rc=0
+  _pueo_claim_build
   local maps; maps="$(prefix_maps)"
   arduino-cli compile --warnings all -b "$FQBN" \
     --build-property "compiler.c.extra_flags=$maps $ROLE_INC" \
@@ -305,6 +344,7 @@ compile() {
 # library rather than the sketch.
 warnings() {
   rm -rf "$BUILD_PATH-warnings"
+  _pueo_claim_build
   local maps; maps="$(prefix_maps)"
   arduino-cli compile --warnings all -b "$FQBN" \
     --build-property "compiler.c.extra_flags=$maps $ROLE_INC" \

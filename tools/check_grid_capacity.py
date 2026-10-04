@@ -75,7 +75,15 @@ def main():
         # The word boundary matters: OTHER_GRID_COLS contains GRID_COLS, and without it
         # this read the Detect grid's 2 columns as the submenu grid's 3.
         m = re.search(r"\bGRID_%s\b\s*=\s*(\d+)\s*;" % n, src)
-        return int(m.group(1)) if m else None
+        if not m:
+            # Returning None here used to make `cols * rows` raise
+            # TypeError, which says nothing about which constant went
+            # missing or that the grid was renamed out from under this.
+            print("FAIL: GRID_%s is not declared in the sketch." % n)
+            print("      The grid constants moved or were renamed, and this")
+            print("      check cannot measure a grid it cannot find.")
+            sys.exit(1)
+        return int(m.group(1))
 
     cols, rows = const("COLS"), const("ROWS")
     slots = cols * rows
@@ -98,11 +106,32 @@ def main():
     }
     SKIP = {"Back to Main Menu", "Main Menu", "Back"}
 
+    # A table that resolves to nothing satisfies "len(items) <= slots" and
+    # every wrap test below, so a menu renamed or deleted would pass as a
+    # menu that comfortably fits. Each table has to actually be there.
+    missing = []
+    for name, tables in sorted(MENUS.items()):
+        for tb in tables:
+            if not R.ino_table(tb):
+                missing.append((name, tb))
+    if missing:
+        print("FAIL: %d menu table(s) resolved to nothing:" % len(missing))
+        for name, tb in missing:
+            print("    %-10s %s" % (name, tb))
+        print()
+        print("      An empty table passes every test below, because there")
+        print("      is nothing in it to be too long or too wide. Either the")
+        print("      table was renamed and this list needs updating, or the")
+        print("      menu is gone and should come out of it.")
+        sys.exit(1)
+
     worst = 0
+    labels_seen = 0
     for name, tables in sorted(MENUS.items()):
         items = []
         for tb in tables:
             items += [x for x in R.ino_table(tb) if x not in SKIP]
+        labels_seen += len(items)
         ok("%-10s %2d of %d slots" % (name, len(items), slots),
            len(items) <= slots,
            "%d entries would not be drawn" % (len(items) - slots))
@@ -125,7 +154,8 @@ def main():
        "%d do not, and TFT_eSPI draws them over the neighbours" % len(bad))
 
     print()
-    print("fullest menu uses %d of %d slots" % (worst, slots))
+    print("fullest menu uses %d of %d slots, over %d label(s) in %d menu(s)"
+          % (worst, slots, labels_seen, len(MENUS)))
     if FAILED:
         print()
         print("FAILED: %d of %d" % (len(FAILED), CHECKS))
