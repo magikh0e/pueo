@@ -110,7 +110,7 @@ tools/build.sh upload COM7
 `setup` is a one-time ~1 GB download. It installs everything into its own root
 rather than a global Arduino install, so it cannot disturb other projects.
 
-Current size at 0.4.30: **1,797,165 bytes, 57% of the app partition**, and
+Current size at 0.4.31: **1,797,165 bytes, 57% of the app partition**, and
 124,452 bytes of RAM, 37%. Both are what the toolchain reported building the
 published image, not a figure carried forward.
 

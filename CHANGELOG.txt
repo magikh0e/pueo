@@ -11,6 +11,130 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.31 - 2026-10-03
+-------------------
+
+  Tooling. Nothing in ESP32-DIV/ or PueoBeacon/ was touched, but the image
+  is not 0.4.30's image plus a version string this time: build.sh changes
+  what reaches the ELF, and the app descriptor carries a SHA-256 of that.
+
+  * CHECK_TOUCH_TARGETS.PY SPENT A RELEASE MEASURING NOTHING.
+
+    All three of its patterns required a literal integer. The two button_x2
+    assignments in the sketch are "x_position + TILE_W", button_y2 the same,
+    and "yPos + <literal>" no longer appears at all, so it matched zero
+    sites. Both its assertions are of the form "not bad_x", which is true of
+    an empty list, so it printed "every row hit box spans the panel" and
+    "2 checks passed" having examined nothing.
+
+    It went vacuous because of the work it was written for. It exists
+    because five list menus tested x <= 220 on a 320 px panel. Those lists
+    became tile grids with a shared gridHit(), the literals went with them,
+    and nothing said the check had lost its subject.
+
+    It resolves expressions now, against the integer constants the sketch
+    declares, and measures the submenu grid directly from GRID_* since that
+    is what the menus are. x_position and y_position are loop locals, seeded
+    with the extreme each can take.
+
+    And it counts what it measured, prints that count, and fails below a
+    floor. Not a zero test: renaming button_x2 away took it from three
+    horizontal boxes to one, and one is not zero, so a zero test passed that
+    too. Losing most of the subject is the same failure as losing all of it
+    and harder to see.
+
+    Verified by experiment. Renaming button_x2 away fails on the floor.
+    Widening GRID_GAP_X to 50 shrinks the computed tile until the far column
+    reaches 270 of 320, which fails naming the box and the 50 px of dead
+    screen, the original bug in new clothes. Untouched it passes over six
+    hit boxes.
+
+    Found by asking which checks would still pass if their subject vanished.
+    A grep for zero guards flagged twelve of fifty-one; blanking each
+    testable subject found this was the only one that passed over nothing.
+    check_adv_nonconn.py and two others noticed.
+
+  * CHECK_GRID_CAPACITY.PY said TypeError, and could not see an empty menu.
+
+    Blanking the sketch made it raise "unsupported operand type(s) for *:
+    'NoneType'", which says nothing about which constant went missing. It
+    names the constant now. And it had the same fault as the above:
+    ino_table() returning an empty list makes "len(items) <= slots" true, so
+    a menu table renamed or removed passed as a menu that comfortably fits.
+    Every table has to resolve, and the run says how many labels it
+    measured, which is 53 across 8 menus.
+
+  * TWO SOURCE TREES SHARED ONE BUILD DIRECTORY.
+
+    BUILD_PATH was keyed on the role alone, so every checkout built into
+    build-$PUEO_ROLE. Verifying a release extracts the published source to a
+    second tree and builds it, which overwrote whatever the working tree had
+    built; cutting 0.4.27, merge failed there because compile had been run
+    in the other tree. Keyed on a hash of the resolved repo path now.
+
+    Each build directory records its tree in a sidecar file beside it, and
+    claiming one removes any whose tree has gone, with its -warnings pair.
+    Beside it, not inside: arduino-cli clears --build-path on a full
+    rebuild, so a marker inside survived an incremental build and vanished
+    exactly when a rebuild happened, which made the pruning quietly stop
+    working for whichever tree had most recently rebuilt.
+
+  * AND THE PART THAT NEARLY BROKE EVERY RELEASE CLAIM.
+
+    Per-tree build directories changed the images produced. Identical source
+    in two trees differed in 64 bytes: the 32 byte app_elf_sha256 at
+    app+0xB0 and the 33 byte image digest that follows from it. The compiled
+    code was the same. That is enough to fail "rebuilds byte-identical from
+    the published archive", which is the claim every release makes.
+
+    prefix_maps already rewrites $REPO and $PUEO_ARDUINO_ROOT, which is what
+    lets two trees agree. $BUILD_PATH lives under $PUEO_ARDUINO_ROOT, so the
+    root was rewritten and the rest of the path survived: the ELF carried
+    arduino\build-detector-<hash>\sketch\ApTracker.cpp.
+
+    $BUILD_PATH is mapped to a fixed tag now, listed last. Last matters: gcc
+    applies the last matching -ffile-prefix-map, and listing it first left
+    the path in the debug info exactly as before. Established by searching
+    the ELF for the hash rather than by reading the manual.
+
+    Verified both directions: identical source in two trees at different
+    paths now produces identical bytes, and pueo-0.4.30-src.zip still
+    rebuilds byte-identical using its own archived build.sh.
+
+    Reproducibility across paths was an accident of every tree using the
+    same directory name. It is a property now.
+
+  * THE SITE SAID THREE SETTINGS AND THE DEVICE HAS HAD FOUR SINCE 0.4.19.
+
+    Reported while this was being cut. JSON logging landed twelve releases
+    ago and reached neither the website nor docs/, while added.html went on
+    saying "Three settings the device did not have". The Settings screen
+    carries Stealth Mode, SD Logging, JSON format and Boot Lock; the page
+    described the first, second and fourth.
+
+    The count was in nine places: a heading, a table of contents entry, and
+    the nav on all seven pages. The section describing it is written from
+    the firmware rather than the old changelog entry: which three features
+    honour it, and which two keep their own format because WiGLE's upload
+    accepts nothing but its CSV and Wireshark reads PCAP.
+
+    check_settings_documented.py, because nothing could have noticed. The
+    one check that reads the site reads the feature menu tables, and its
+    docstring says Settings is outside what it covers: the screen is drawn
+    from its own switch tables. The row labels are read out of those tables
+    now and each has to appear somewhere in the site's pages.
+
+    It found a second one on its first run. "Log to SD" is the master
+    switch, and the page described it as "a master switch" without ever
+    naming it, so somebody reading the screen and the page together had
+    nothing to match. It is named now.
+
+    The reverse is still not checked, for the reason check_site_menu.py
+    gives about its own direction: a page may say more than the screen does.
+
+  52 checks pass.
+
+
 0.4.30 - 2026-10-03
 -------------------
 
@@ -4099,6 +4223,11 @@ of them, because a digest is the one thing about an old release
 that is still worth having after the file itself is gone.
 
 Generated by tools/changelog_digests.py from dist/*.sha256.
+
+0.4.30
+  b8b36cf6e16daae87dd4513f58ecedd8434684c3c5beaca62a4146cb8455dec5  pueo-0.4.30-beacon-35-merged.bin
+  50bbb3b24cab3c203c136ae47613910a7c7c2f45fb2e2877c83bb355ce0b0d38  pueo-0.4.30-merged.bin
+  572fc38e558a323a0ad761938025cca6b0c185d54505df0d055371b2b258d660  pueo-0.4.30-src.zip
 
 0.4.29
   81c9a9f465d8dd9323249b1a81615a725f275290351a85cd7a2962d62489fac9  pueo-0.4.29-beacon-35-merged.bin
