@@ -28,3 +28,10 @@ tools/.oui-cache.csv
 
 # Machine-local working notes, same reason as .publish.local above.
 *.local.md
+
+# The enclosure sources. make_release.sh has always kept these out of the
+# source archive; this keeps them out of the repository too, which is the
+# half that was still publishing them, since this repository is public.
+# They stay on disk, editable, and the enclosure page still describes the
+# design in full.
+docs/pueo/*.scad

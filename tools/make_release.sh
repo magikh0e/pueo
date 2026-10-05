@@ -291,11 +291,15 @@ done
 # Dragged in by cp -r, and not wanted in a source archive.
 rm -rf "$STAGE/.arduino"
 
-# The enclosure sources are not published. The STLs are what the site offers
-# and what people print; the .scad files stay in the repository, where they
-# are edited, and go no further. docs/pueo ships wholesale, so without this
-# they would ride along in every archive and the decision would hold only on
-# the website.
+# The enclosure sources are not published, and neither are the STLs now.
+# This used to say the .scad files "stay in the repository", which was true
+# of archives and not of the repository: this one is public, so sitting in
+# docs/pueo was publication. They are untracked and ignored now, and the
+# site no longer offers the printable models either. What remains is the
+# enclosure page, which describes the design in full.
+#
+# docs/pueo still ships wholesale, so this stays: a .scad that reappears
+# there must not ride along into an archive.
 #
 # Asserted rather than assumed: a file added to docs/pueo later should not
 # quietly reinstate this.
