@@ -11,6 +11,63 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.35 - 2026-10-05
+-------------------
+
+  Nothing reaches the device. The only file under ESP32-DIV/ is
+  SpotterSignatures.h and its diff is comments: no row moved, no grade
+  changed, no table resized. The image is 0.4.34's apart from the version
+  string.
+
+  * THE ENCLOSURE SOURCES COME OUT OF THE REPOSITORY.
+
+    make_release.sh has stripped .scad from the archive since 0.3.8, and its
+    comment said the files "stay in the repository, where they are edited,
+    and go no further". That was true of archives and not of the repository:
+    this one is public, so sitting in docs/pueo was publication. The half of
+    the decision being enforced was not the half that mattered.
+
+    Untracked and ignored now. They stay on disk and stay editable, and the
+    assertion in make_release.sh stays as well, because docs/pueo still ships
+    wholesale and a .scad that reappears there must not ride along.
+
+    This stops future publication and nothing more. The files are in the
+    history of a public repository and in anything already cloned.
+
+  * THE SIGNATURES ARE PUBLISHED SEPARATELY.
+
+    All 266 of them, as Markdown, CSV and JSON, with a writeup on what the
+    three confidence levels mean, how they interact, and how to pick one.
+    Extracted from SpotterSignatures.h, so the header stays the source and
+    the list stays readable without opening it.
+
+    The corroboration rule is written out exactly there for the first time:
+    highest confidence seen wins, a differently labelled match marks the
+    device corroborated, and a corroborated Likely becomes Strong. Weak is
+    never promoted, or two common radios in one device would read as
+    surveillance hardware.
+
+  * THE CHECK COUNT WAS WRONG IN BOTH DIRECTIONS.
+
+    This file said 53 at 0.4.33 and 0.4.34 and the website said 42. There
+    were 50 then and there are 50 now, and none has been removed. Running all
+    of them and reading each one's own summary gives 34 that count their
+    cases, asserting 378,587 between them, and 16 that return a verdict.
+
+    The first attempt at that tally was also wrong, crediting check_eapol's
+    124,315 assertions to check_doc_counts, whose job is to print other
+    scripts' numbers back.
+
+  * ISSUE TEMPLATES, AND WHAT THEY ASK FIRST.
+
+    The bug form asks whether Stealth was on, because the twenty features
+    that transmit refuse to start under it by design, so "it will not start"
+    is more often that than a fault. It also notes that the GPS screen closes
+    the serial console, so a GPS report with no serial output is expected.
+
+  50 checks pass.
+
+
 0.4.34 - 2026-10-03
 -------------------
 
