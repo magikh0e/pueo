@@ -14,7 +14,20 @@
 # So the Patreon below is this fork's, not upstream's, and the ambiguity
 # that got the old entry removed does not apply: both names here are the
 # same person, so whichever a visitor picks goes to the same place. If
-# anything else is ever added, it has to hold to that -- one destination,
+# anything else is ever added, it has to hold to that, one destination,
 # however many platforms.
+#
+# GitHub Sponsors belongs here as well and is not here yet. It takes no
+# platform cut, which at this scale is most of the difference, and it sits
+# on the repository rather than asking somebody to leave it. The line is
+# below, commented, because the listing does not exist: the GraphQL field
+# hasSponsorsListing is false for this account, so /sponsors/magikh0e
+# redirects to the profile. Uncommented now it would put "GitHub" in the
+# dropdown pointing at a page that cannot take a payment, which is the
+# same coin toss as before and worse, because the coin has no second side.
+#
+# Enable it at github.com/sponsors, finish the bank and tax details, then
+# uncomment. Nothing else needs to change.
 patreon: magikh0e
 buy_me_a_coffee: magikh0e
+# github: magikh0e
