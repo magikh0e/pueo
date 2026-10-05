@@ -215,19 +215,11 @@ struct NameInSig {
   const char* label;
 };
 
-/* ── Where a batch of these came from ────────────────────────────────────
+/* ── What belongs on this screen ─────────────────────────────────────────
  *
- * The surveillance, law-enforcement and camera entries below were found by
- * comparing this file against the signature catalog in
- * github.com/OffGridPete/Fieldwatch (catalog 88), which is MIT licensed.
- * MIT into GPL-3.0-or-later works; the reverse does not, so nothing here
- * goes back the other way.
- *
- * What was taken is which vendors are worth naming and what they put in a
- * name. The grading is this project's own, and so is the decision about
- * what belongs on a surveillance screen at all: Fieldwatch files handheld
- * action cameras under CAMERA and they are not here, because a GoPro is a
- * camera and is not surveillance.
+ * Hardware whose purpose is observing other people, and which announces
+ * itself without being asked. A handheld action camera is a camera and is
+ * not surveillance, so none are here. The line is purpose, not optics.
  * ───────────────────────────────────────────────────────────────────────── */
 
 /* ── Fixed full addresses ───────────────────────────────────────────────── */
@@ -299,8 +291,8 @@ static const OuiSig kOuiSigs[] = {
   {{0x00, 0x80, 0x48}, Kind::Accessory, Conf::Weak,   "Compex (shared board?)"},
   {{0x04, 0xF0, 0x21}, Kind::Accessory, Conf::Weak,   "Compex (shared board?)"},
 
-  /* Flock-family pole batteries. Weak on the OUI by Fieldwatch's own note
-   * that the name is the stronger signal, which kNameInSigs carries. */
+  /* Flock-family pole batteries. Weak on the OUI because the name is the
+   * stronger signal here, and kNameInSigs is what carries it. */
   {{0x04, 0x0D, 0x84}, Kind::Accessory, Conf::Weak,   "FS battery?"},
   {{0x1C, 0x34, 0xF1}, Kind::Accessory, Conf::Weak,   "FS battery?"},
   {{0x38, 0x5B, 0x44}, Kind::Accessory, Conf::Weak,   "FS battery?"},
@@ -911,8 +903,8 @@ static const NameInSig kNameInSigs[] = {
   {"Deauther",     0, Kind::Pentest, Conf::Likely, "ESP8266 Deauther"},
 
   /* Plate readers and municipal cameras whose names carry the vendor in the
-   * middle rather than at the front. These are the ones from the Fieldwatch
-   * comparison that the prefix table could not express. */
+   * middle rather than at the front, which the prefix table cannot
+   * express. */
   {"Rekor",        0, Kind::Alpr,    Conf::Likely, "Rekor (ALPR)"},
   {"Hayden",       0, Kind::Alpr,    Conf::Likely, "Hayden AI (ALPR)"},
   {"Avigilon",     0, Kind::Camera,  Conf::Likely, "Avigilon"},
