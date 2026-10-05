@@ -1,0 +1,24 @@
+# Blank issues stay on. A documentation mistake, a wrong number on the site,
+# a licence question: none of those fit a form and none should have to.
+blank_issues_enabled: true
+contact_links:
+  - name: Wiring, flashing, or a module that will not answer
+    url: https://github.com/magikh0e/pueo/discussions
+    about: >
+      Build problems get answered faster in Discussions and leave something
+      searchable behind. Bring the board, the modules and what you measured.
+  - name: A vendor the Detect screen should recognise
+    url: https://github.com/magikh0e/surveillance-signatures/issues
+    about: >
+      Signatures live in their own repository, with a form that asks for the
+      evidence that settles a row.
+  - name: Building one, and the pin map
+    url: https://pueo.magikh0e.pl/hardware.html
+    about: >
+      The parts, how they are wired, which pins are shared, and the hazards
+      worth knowing before the soldering iron is hot.
+  - name: What the firmware does, feature by feature
+    url: https://pueo.magikh0e.pl/firmware.html
+    about: >
+      Worth a look before filing a feature request. Some of it is already
+      there under a name you would not have guessed.

@@ -1,0 +1,77 @@
+name: A feature or a change
+description: Something the firmware should do, or should do differently
+title: "feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth knowing before you write it up: this runs on one ESP32 with
+        203 KB of free DRAM and a single 3.00 MB app partition, and the panel
+        is 320 by 480 driven by a finger. Most ideas die on one of those
+        three rather than on whether they are good.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What it should do
+      description: >
+        From the point of view of somebody holding the device. What they
+        touch, what appears, what they learn from it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: What it is for
+      description: >
+        The situation where you would reach for it. This matters more than
+        the mechanism: a clear problem usually suggests a simpler feature
+        than the one that was asked for.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transmits
+    attributes:
+      label: Does it transmit
+      description: >
+        Anything that transmits has to refuse to start under Stealth, carry a
+        warning, and be defensible as something to point at hardware you own.
+      options:
+        - No, it only listens
+        - Yes, it transmits
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Does it need a module that is not already supported
+      options:
+        - No, it uses what is already there
+        - It needs the CC1101, NRF24, PN532 or GPS
+        - It needs hardware this project does not support yet
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: prior
+    attributes:
+      label: Anything that already does this
+      description: >
+        Another project, a paper, a protocol document, a capture. Not
+        required, and the fastest way to get something built.
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        **Surveillance signatures do not belong here.** A vendor the Detect
+        screen should recognise goes to
+        [surveillance-signatures](https://github.com/magikh0e/surveillance-signatures/issues),
+        which has a form for it and asks for the evidence that settles it.

@@ -1,0 +1,143 @@
+name: Something is wrong on the device
+description: A feature misbehaves, crashes, or does not do what the docs say
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Wiring that will not work, a module that will not answer, a board
+        that will not flash: those are build problems and go in
+        [Discussions](https://github.com/magikh0e/pueo/discussions), where
+        they get answered faster and leave something searchable behind.
+
+        This form is for the firmware doing the wrong thing.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >
+        From System, then Device Info, or the serial banner at boot. If you
+        do not know, say so rather than guessing.
+      placeholder: "0.4.34"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: image
+    attributes:
+      label: Where the build came from
+      options:
+        - A merged image from the site or a GitHub release
+        - Built from source with the Arduino IDE or arduino-cli
+        - Built from source, with local changes
+        - Updated over the air from an earlier version
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: board
+    attributes:
+      label: Board
+      description: >
+        The 3.5 inch ESP32-3248S035R is the reference board and the only one
+        the firmware is maintained against. Anything else is worth reporting
+        and may not be something that can be fixed.
+      options:
+        - 3.5 inch ESP32-3248S035R
+        - Another ESP32 board with a different panel
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sector
+    attributes:
+      label: Where it happens
+      options:
+        - WiFi
+        - Bluetooth
+        - Detect, the surveillance and drone screens
+        - SubGHz
+        - NRF24
+        - "RFID/NFC"
+        - GPS
+        - System and Settings
+        - Boot, before any menu
+        - Somewhere else, or everywhere
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stealth
+    attributes:
+      label: Was Stealth on
+      description: >
+        Under Stealth the twenty features that transmit refuse to start by
+        design, and say so. If something will not start, check this first.
+      options:
+        - "Off"
+        - "On"
+        - Not sure
+        - Not relevant, the feature does not transmit
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: modules
+    attributes:
+      label: Modules fitted
+      description: Leave them all unticked if the board is bare.
+      options:
+        - label: CC1101, sub-GHz
+        - label: NRF24, 2.4 GHz
+        - label: PN532, NFC and RFID
+        - label: GPS
+        - label: A microSD card is in the slot
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens, and what you expected instead
+      description: >
+        If a screen is involved, a photograph of it is worth a paragraph.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+      description: >
+        From power on. Which tiles you touched, in order, and whether it
+        happens every time or now and then.
+      placeholder: |
+        1. Boot
+        2. WiFi, then Packet Monitor
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: serial
+    attributes:
+      label: Serial output
+      description: >
+        115200 baud. A panic with a backtrace is the single most useful thing
+        you can attach. Note that opening the GPS screen closes the console,
+        so a GPS problem will not have serial output and that is expected.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Before you post
+      options:
+        - label: >
+            This happened on equipment I own or have written permission to
+            test.
+          required: true
