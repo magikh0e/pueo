@@ -131,6 +131,13 @@ BLE device names, 16- and 128-bit service UUIDs, and the bytes past a company
 ID or a service UUID, against 266 signatures across nine kinds, and grades
 what it finds rather than asserting it.
 
+The signatures are published separately at
+[magikh0e/surveillance-signatures](https://github.com/magikh0e/surveillance-signatures),
+as Markdown, CSV and JSON, with a writeup on what the grades mean and how to
+contribute one. They are extracted from `ESP32-DIV/SpotterSignatures.h` here,
+so that repository is where to send a correction or a vendor this does not
+know about.
+
 Two of those are not surveillance gear and are there because knowing they
 are nearby is worth something on its own. **Pwnagotchi** beacons from a fixed
 `de:ad:be:ef:de:ad` with its stats in the payload, so it announces itself
