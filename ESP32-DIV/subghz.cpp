@@ -2217,18 +2217,15 @@ void updateDisplay() {
 void transmitProfile(int index) {
     (void)index;
 
-    /* Both gates live here rather than on the screen, because this is the
-     * only thing in Saved Profile that drives the radio. Each returns to
-     * the list rather than closing it. */
-    if (Stealth::refuseAction("Sending a saved profile")) {
-        profileRestoreChrome();
-        return;
-    }
-    if (!cc1101ReadyForAction("Sending a profile")) {
-        profileRestoreChrome();
-        return;
-    }
-
+    /* Every gate for this feature lives here rather than on the screen,
+     * because sending is the only thing in Saved Profile that drives the
+     * radio. Each returns to the list rather than closing it.
+     *
+     * Ordered cheapest and truest first. A profile with no protocol
+     * mapping cannot be sent by any radio, so saying "fit a CC1101" about
+     * one would be sending somebody after hardware that will not help.
+     * Then Stealth, which is a decision already made, and only then the
+     * question of whether the part is on the end of the bus. */
     String err;
     loadSelectedFromSd(&err);
     if (!selectedValid) return;
@@ -2254,6 +2251,15 @@ void transmitProfile(int index) {
       delay(2600);
       profileRestoreChrome();
       return;
+    }
+
+    if (Stealth::refuseAction("Sending a saved profile")) {
+        profileRestoreChrome();
+        return;
+    }
+    if (!cc1101ReadyForAction("Sending a profile")) {
+        profileRestoreChrome();
+        return;
     }
 
     ELECHOUSE_cc1101.setSidle();

@@ -387,6 +387,26 @@ assert _send.index("protocol == 0") < _send.index("setProtocol"), \
     "the unmapped-protocol guard runs after setProtocol, which is too late"
 checks += 1
 
+# And before the radio gates, not after them. A profile with no mapping
+# cannot be sent by any radio, so refusing it with "fit a CC1101" sends
+# somebody after hardware that will not help, and it buries the only
+# refusal that needs no hardware behind one that does.
+assert (_send.index("protocol == 0")
+        < _send.index("cc1101ReadyForAction")), (
+    "the unmapped-protocol refusal sits behind the CC1101 gate, so it asks "
+    "for a radio that would not change the answer")
+checks += 1
+assert (_send.index("protocol == 0")
+        < _send.index("Stealth::refuseAction")), (
+    "the unmapped-protocol refusal sits behind the Stealth gate")
+checks += 1
+
+# The two radio gates still have to be there, just later.
+assert "cc1101ReadyForAction" in _send, "the send no longer checks for a radio"
+assert "Stealth::refuseAction" in _send, "the send no longer honours Stealth"
+checks += 2
+checks += 1
+
 _imp = _body("void importSelected(")
 assert "parsed.protocol == 0" in _imp, \
     "the import stores an unmapped protocol without saying so"
