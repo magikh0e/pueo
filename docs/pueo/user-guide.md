@@ -159,7 +159,7 @@ watches for the Remote ID broadcasts drones are required to send.
 
 #### What Surveillance is looking at
 
-266 signatures across 9 kinds. A row appears when something in range
+274 signatures across 9 kinds. A row appears when something in range
 announces itself in a way one of them recognises.
 
 The useful thing to know is not the list of vendors, which goes stale, but

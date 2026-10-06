@@ -128,7 +128,7 @@ their accessories, body cameras, fixed cameras and doorbells, smart glasses,
 item trackers, vehicle modules and pentest kit. It matches whole MAC
 addresses, Wi-Fi OUIs, network names from the start or anywhere in the middle,
 BLE device names, 16- and 128-bit service UUIDs, and the bytes past a company
-ID or a service UUID, against 266 signatures across nine kinds, and grades
+ID or a service UUID, against 274 signatures across nine kinds, and grades
 what it finds rather than asserting it.
 
 The signatures are published separately at

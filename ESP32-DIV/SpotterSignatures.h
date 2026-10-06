@@ -501,6 +501,37 @@ static const OuiSig kOuiSigs[] = {
   {{0xDE, 0xAD, 0xBE}, Kind::Pentest, Conf::Weak,   "deadbeef MAC"},
 
   {{0xB8, 0x35, 0x32}, Kind::Alpr, Conf::Weak,    "unregistered OUI"},
+
+  /* ── Zigbee coordinators ─────────────────────────────────────────────
+   *
+   * Nothing here can hear Zigbee. It is 802.15.4, O-QPSK with direct
+   * sequence spreading, and no radio on this board demodulates it: the
+   * ESP32 has no 802.15.4 at all, the CC1101 is sub-GHz, and the nRF24 is
+   * GFSK in the right band and the wrong shape.
+   *
+   * The hub is a different matter. Every one of these also carries WiFi or
+   * BLE and announces itself there, so the network is findable by the thing
+   * running it even though its traffic is not.
+   *
+   * Kind::Mesh for the same reason Meshtastic is: a mesh radio node, worth
+   * knowing is nearby, and a different claim from a camera.
+   *
+   * Likely, all of them. The blocks are out of the IEEE registry and are not
+   * in doubt; what is in doubt is the inference. A Philips Lighting address
+   * may be a bridge, which coordinates, or a bulb, which does not, and
+   * either is only seen while it happens to be transmitting.
+   *
+   * Lutron is deliberately absent. Its block is real and assigned, and
+   * Caseta runs Clear Connect on 434 MHz, so the row would have been a
+   * confident claim about the wrong protocol. */
+  {{0x00, 0x17, 0x88}, Kind::Mesh, Conf::Likely, "Philips Hue (Zigbee)"},
+  {{0xEC, 0xB5, 0xFA}, Kind::Mesh, Conf::Likely, "Philips Hue (Zigbee)"},
+  {{0xC4, 0x29, 0x96}, Kind::Mesh, Conf::Likely, "Signify Hue (Zigbee)"},
+  {{0xFC, 0x26, 0x8C}, Kind::Mesh, Conf::Likely, "Signify Hue (Zigbee)"},
+  {{0x24, 0xFD, 0x5B}, Kind::Mesh, Conf::Likely, "SmartThings hub"},
+  {{0x18, 0xC2, 0x3C}, Kind::Mesh, Conf::Likely, "Aqara/Lumi gateway"},
+  {{0x54, 0xEF, 0x44}, Kind::Mesh, Conf::Likely, "Aqara/Lumi gateway"},
+  {{0x68, 0xEC, 0x8A}, Kind::Mesh, Conf::Likely, "IKEA smart home hub"},
 };
 
 /* ── WiFi: SSID patterns in probe requests and beacons ───────────────────── */

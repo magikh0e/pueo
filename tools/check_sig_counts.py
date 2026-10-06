@@ -249,8 +249,14 @@ def main():
         # correct one and reports the page as carrying two counts. The
         # lookahead is what makes a spelling match only when it is the whole
         # number rather than the start of a longer one.
+        #
+        # The hyphen belongs in it as much as the " and" does, and was
+        # missing until 274 arrived: "two hundred and seventy" is a prefix
+        # of "two hundred and seventy-four", and a word boundary sits
+        # happily before a hyphen, so the check reported a page as carrying
+        # two counts when it carried one.
         stale = [w for n, w in WORDS.items() if n != total
-                 and re.search(w + r"\b(?!\s+and\b)", html, re.I)]
+                 and re.search(w + r"\b(?!\s+and\b|-)", html, re.I)]
         ok("  and no longer says an older one", not stale,
            "it also says %s, so one of the two is wrong" % stale)
 
