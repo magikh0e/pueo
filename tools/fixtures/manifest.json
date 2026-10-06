@@ -32,6 +32,26 @@
           "M4": 1
         }
       }
+    },
+    {
+      "file": "ptm-eapol-handshake-once.pcap",
+      "source": "Captured with Pueo 0.4.39, WiFi > Packet Monitor parked on channel 4, on a home network belonging to magikh0e, while a phone reconnected. Anonymised by tools/anonymise_capture.py and trimmed by tools/trim_capture.py to the key frames plus 20 records either side.",
+      "licence": "GPL-3.0-or-later, as part of this repository",
+      "note": "The clean case, which the fixture beside it is not: exactly one of each message, no retransmission, so M1 M2 M3 M4 and nothing to disambiguate. The two together are the pair worth having, because a parser that counts rather than classifies passes one of them and fails the other. Taken from a capture where the general pool dropped 1,387 of 4,268 frames, 32 per cent, while these four arrived consecutively at records 1978 to 1982 and all four reached the card: that is the reserve doing its job under the exact pressure that used to destroy the burst. Verified in the file by raw byte search rather than by this parser, and the key_info values match Wireshark's own WPA reference capture: 0x008A, 0x010A, 0x13CA, 0x030A.",
+      "expect": {
+        "frames": 45,
+        "eapol": 4,
+        "protected": 7,
+        "headers": {
+          "26": 4
+        },
+        "msgs": {
+          "M1": 1,
+          "M2": 1,
+          "M3": 1,
+          "M4": 1
+        }
+      }
     }
   ]
 }

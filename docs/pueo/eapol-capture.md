@@ -252,7 +252,7 @@ say so in a way that is easy to fix and hard to guess.
    first two. Nothing calls it yet.
 3. **Done.** `classify`, `addresses` and the per-AP tracker, in the same
    file. `tools/check_eapol_locate.py` became `tools/check_eapol.py` and
-   covers all of it: 124,333 checks.
+   covers all of it: 124,344 checks.
 4. **Done.** Packet Monitor offers every frame to the tracker and shows
    `HS <usable>/<total>` beside the packet counter, amber until a network
    has M2 and M3 and green once one does, with a line on the serial console
