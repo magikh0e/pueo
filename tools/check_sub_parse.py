@@ -24,7 +24,8 @@ refused by name.
 # Re-pin only after reading the C and bringing the Python into line.
 from transcript_guard import guard, guard_consts
 
-guard("SubFile.cpp", "parse", "d728c63cd9188ee9")
+guard("SubFile.cpp", "parse", "f4470b226b8b9407")
+guard("SubFile.cpp", "write", "08c12894878ed04a")
 guard_consts("SubFile.cpp", {
     "kFreqMinHz": 280000000,
     "kFreqMaxHz": 960000000,
@@ -37,6 +38,16 @@ MISSING = "MissingField"
 BAD = "BadField"
 BITS = "TooManyBits"
 FREQ = "FreqOutOfRange"
+ROLLING = "RollingCode"
+
+# Counter-based protocols, named rather than detected. Every one is longer
+# than 32 bits, so each already failed on bit count; this changes the
+# sentence, not the outcome. Mirrors kRollingCodes in SubFile.cpp.
+ROLLING_CODES = (
+    "KeeLoq", "Somfy Telis", "Somfy Keytis", "Star Line", "Security+ 2.0",
+    "Security+ 1.0", "Nice Flor S", "CAME Atomo", "AN-Motors",
+    "Alutech AT-4N", "Hormann BiSecur", "Faac SLH", "Centurion Nova",
+)
 
 FREQ_MIN = 280000000
 FREQ_MAX = 960000000
@@ -92,6 +103,9 @@ def parse(text):
         return MISSING, out
     if freq < FREQ_MIN or freq > FREQ_MAX:
         return FREQ, out
+    # Before the bit test, same as the C++.
+    if out["protocolName"] in ROLLING_CODES:
+        return ROLLING, out
     if bits == 0 or bits > 32:
         return BITS, out
 
@@ -215,16 +229,28 @@ case("Bit 33 refused", parse(KEYFILE.replace("Bit: 24", "Bit: 33"))[0] == BITS)
 case("Bit 32 allowed", parse(KEYFILE.replace("Bit: 24", "Bit: 32"))[0] == OK)
 
 # --- protocols we do not claim to know -------------------------------------
-for name in ("CAME", "NICE FLO", "Holtek", "Linear", "KeeLoq", "Somfy Telis"):
+#
+# Fixed-code, so the capture is good: the frequency, key and bit count are
+# real and the record is worth storing. What is missing is a timing mapping,
+# which is a decoder somebody could add. Protocol 0 says so, and subghz.cpp
+# refuses to transmit it rather than letting rc-switch substitute Princeton.
+for name in ("CAME", "NICE FLO", "Holtek", "Linear", "SMC5326", "PT2260"):
     r, p = parse(KEYFILE.replace("Protocol: Princeton", "Protocol: " + name))
     case("%s parses but maps to no rc-switch number" % name,
          r == OK and p["protocol"] == 0 and p["protocolName"] == name)
+
+# Rolling codes are a different answer, not a weaker one. No decoder fixes
+# a counter: the receiver has moved past the captured value already.
+for name in ("KeeLoq", "Somfy Telis"):
+    r, _ = parse(KEYFILE.replace("Protocol: Princeton", "Protocol: " + name))
+    case("%s is refused as a rolling code, not as unmapped" % name,
+         r == ROLLING)
 
 # --- fuzz ------------------------------------------------------------------
 import random
 random.seed(20260919)
 ALPHABET = "abcdefABCDEF0123456789 :\n\r\t-Filetyp,.FlipperSubGhzKeyRAWData"
-VALID = {OK, NOT_SUB, RAW, MISSING, BAD, BITS, FREQ}
+VALID = {OK, NOT_SUB, RAW, MISSING, BAD, BITS, FREQ, ROLLING}
 for _ in range(60000):
     n = random.randint(0, 200)
     text = "".join(random.choice(ALPHABET) for _ in range(n))
@@ -246,5 +272,135 @@ for i in range(len(base)):
         assert r in VALID, (i, repl, r)
         checks += 1
 
+# ── write() is the inverse, so prove it round-trips ───────────────────────
+#
+# A writer is easy to get subtly wrong in a way no reader of the code
+# notices: a byte order, a field name, a bit count that disagrees with the
+# key. The test for one is not reading it, it is feeding its output back
+# through the parser and insisting on the same values.
+
+PROTO_NAMES = {v: k for k, v in PROTOCOLS.items()}
+
+
+def write(frequency, value, bit_length, protocol, te=0):
+    """Mirrors SubFile::write. Returns None where it returns 0."""
+    name = PROTO_NAMES.get(protocol)
+    if name is None or protocol == 0:
+        return None
+    if bit_length == 0 or bit_length > 32:
+        return None
+    if frequency < FREQ_MIN or frequency > FREQ_MAX:
+        return None
+    key = [0, 0, 0, 0,
+           (value >> 24) & 0xFF, (value >> 16) & 0xFF,
+           (value >> 8) & 0xFF, value & 0xFF]
+    out = (
+        "Filetype: Flipper SubGhz Key File\n"
+        "Version: 1\n"
+        "Frequency: %d\n"
+        "Preset: FuriHalSubGhzPresetOok650Async\n"
+        "Protocol: %s\n"
+        "Bit: %d\n"
+        "Key: %s\n" % (frequency, name, bit_length,
+                        " ".join("%02X" % b for b in key)))
+    if te:
+        out += "TE: %d\n" % te
+    return out
+
+
+case("write refuses an unmapped protocol", write(433920000, 1, 24, 0) is None)
+case("  and a bit count the value cannot hold",
+     write(433920000, 1, 33, 1) is None)
+case("  and a frequency the radio cannot reach",
+     write(100000000, 1, 24, 1) is None)
+
+# The sample the import was verified against on hardware.
+_s = write(433920000, 0x123456, 24, 1)
+case("write produces a file the parser accepts", parse(_s)[0] == OK)
+_r, _p = parse(_s)
+case("  frequency survives", _p["frequency"] == 433920000)
+case("  value survives", _p["value"] == 0x123456)
+case("  bit count survives", _p["bitLength"] == 24)
+case("  protocol survives", _p["protocol"] == 1)
+case("  and the key is big-endian in the last three bytes",
+     "Key: 00 00 00 00 00 12 34 56" in _s)
+
+_t = write(433920000, 0x123456, 24, 1, te=403)
+case("TE is written when there is one", "TE: 403" in _t)
+case("  and omitted when there is not", "TE:" not in _s)
+case("  and a file with TE still parses", parse(_t)[1]["te"] == 403)
+
+for _bits in range(1, 33):
+    for _v in (0, 1, (1 << _bits) - 1, 0x123456 & ((1 << _bits) - 1)):
+        for _hz in (280000000, 433920000, 868350000, 960000000):
+            _w = write(_hz, _v, _bits, 1)
+            assert _w is not None, (_hz, _v, _bits)
+            _rr, _pp = parse(_w)
+            assert _rr == OK, (_rr, _w)
+            assert _pp["frequency"] == _hz
+            assert _pp["bitLength"] == _bits
+            assert _pp["value"] == _v, (_v, _pp["value"])
+            assert _pp["protocol"] == 1
+            checks += 1
+
+# Rolling codes are named, and the name is what changes the message.
+for _name in ROLLING_CODES:
+    _f = KEYFILE.replace("Princeton", _name).replace("Bit: 24", "Bit: 66")
+    _rr, _ = parse(_f)
+    assert _rr == ROLLING, (_name, _rr)
+    checks += 1
+    # Short ones too: the refusal is about the protocol, not the length.
+    _f2 = KEYFILE.replace("Princeton", _name)
+    assert parse(_f2)[0] == ROLLING, _name
+    checks += 1
+
+# ── and the firmware keeps protocol 0 visible ─────────────────────────────
+#
+# The transcription above proves the parser hands back 0 for a name it will
+# not guess at. What that is worth depends entirely on what subghz.cpp does
+# next, and rc-switch does the unhelpful thing on its own: setProtocol()
+# clamps anything below 1 up to 1, so an unguarded send transmits Princeton
+# timing under another protocol's name and looks like it worked.
+
+import io as _io
+import os as _os
+
+_SUB = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                     "..", "ESP32-DIV", "subghz.cpp")
+_src = _io.open(_SUB, encoding="utf-8", errors="replace").read()
+
+
+def _body(sig):
+    i = _src.index(sig)
+    j = _src.index("\n}\n", i)
+    return _src[i:j]
+
+
+_send = _body("void transmitProfile(int index) {")
+assert "protocol == 0" in _send, \
+    "transmitProfile does not check for an unmapped protocol; rc-switch " \
+    "will clamp it to 1 and transmit Princeton timing instead"
+checks += 1
+
+# The guard has to come before the radio is told anything, not after.
+assert _send.index("protocol == 0") < _send.index("setProtocol"), \
+    "the unmapped-protocol guard runs after setProtocol, which is too late"
+checks += 1
+
+_imp = _body("void importSelected(")
+assert "parsed.protocol == 0" in _imp, \
+    "the import stores an unmapped protocol without saying so"
+checks += 1
+assert "protocolName" in _imp, \
+    "the import does not name the protocol it cannot send, which is the " \
+    "part that says which decoder is missing"
+checks += 1
+
+# A bare digit reads as an answer. 0 is the absence of one.
+assert 'tft.print("none")' in _src, \
+    "the browser prints protocol 0 as a number rather than as no mapping"
+checks += 1
+
 print("ok -- %d checks" % checks)
-print("RAW is refused three ways; only Princeton claims an rc-switch number")
+print("RAW is refused three ways; only Princeton claims an rc-switch number,")
+print("and protocol 0 is loud at the import, the browser and the send")

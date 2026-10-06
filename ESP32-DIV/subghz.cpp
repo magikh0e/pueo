@@ -2107,7 +2107,16 @@ static void drawDetails() {
   tft.setCursor(PROFILE_COL2_LABEL_X, detailsY + PROFILE_LINE_STEP);
   tft.print("Ptc:");
   tft.setCursor(PROFILE_COL2_VALUE_X, detailsY + PROFILE_LINE_STEP);
-  tft.print(selectedProfile.protocol);
+  /* 0 is not an rc-switch protocol number, it is the absence of one: a .sub
+   * whose protocol name this firmware will not guess at. Printing the digit
+   * made that look like an answer. */
+  if (selectedProfile.protocol == 0) {
+    tft.setTextColor(UI_WARN);
+    tft.print("none");
+    tft.setTextColor(UI_TEXT);
+  } else {
+    tft.print(selectedProfile.protocol);
+  }
 
   tft.setCursor(PROFILE_LABEL_X, detailsY + (PROFILE_LINE_STEP * 2));
   tft.print("Val:");
@@ -2215,6 +2224,28 @@ void transmitProfile(int index) {
     loadSelectedFromSd(&err);
     if (!selectedValid) return;
     Profile profileToSend = selectedProfile;
+
+    /* rc-switch clamps anything below 1 up to 1, so sending a profile with
+     * no mapping would transmit Princeton timing under another protocol's
+     * name: no result, and no reason given. Refuse instead. */
+    if (profileToSend.protocol == 0) {
+      profileClearContentArea(TFT_BLACK);
+      tft.setCursor(10, 30 + yshift);
+      tft.setTextColor(UI_WARN);
+      tft.print("No protocol mapping");
+      tft.setTextColor(TFT_WHITE);
+      tft.setCursor(10, 50 + yshift);
+      tft.print("This profile came from a .sub whose");
+      tft.setCursor(10, 66 + yshift);
+      tft.print("protocol this firmware will not guess");
+      tft.setCursor(10, 82 + yshift);
+      tft.print("at. Sending it would transmit the");
+      tft.setCursor(10, 98 + yshift);
+      tft.print("wrong timing.");
+      delay(2600);
+      profileRestoreChrome();
+      return;
+    }
 
     ELECHOUSE_cc1101.setSidle();
     ELECHOUSE_cc1101.setMHZ(profileToSend.frequency / 1000000.0);
@@ -4096,6 +4127,21 @@ static void importSelected() {
       parsed.frequency, parsed.value, parsed.bitLength, parsed.protocol,
       nameFromFile(it.name).c_str());
   replayat::storeProfile(p);
+
+  /* protocol 0 is the parser saying it will not guess at this file's
+   * protocol name. The record is still worth storing, because the
+   * frequency, key and bit count are real, but a plain "Imported" would
+   * leave the first sign of trouble to be a Send that quietly does
+   * nothing. Name the protocol: which decoder is missing is the actionable
+   * part. */
+  if (parsed.protocol == 0) {
+    s_status = String("Stored, ") +
+               (parsed.protocolName[0] != '\0' ? parsed.protocolName
+                                                : "that protocol") +
+               " cannot send";
+    s_statusWarn = true;
+    return;
+  }
 
   s_status = rotated ? "Imported, 5 sent to SD"
                      : String("Imported to slot ")

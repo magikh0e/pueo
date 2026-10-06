@@ -40,6 +40,7 @@ enum class Result : uint8_t {
   BadField,        // a field that will not parse
   TooManyBits,     // Bit above 32, which will not fit the value
   FreqOutOfRange,  // not a frequency this hardware can reach
+  RollingCode,     // a counter-based protocol: a capture will not replay
 };
 
 struct Parsed {
@@ -62,5 +63,31 @@ Result parse(const char* text, size_t len, Parsed* out);
 
 /** A short phrase for a result, for putting on screen. */
 const char* resultText(Result r);
+
+/**
+ * The Flipper protocol name for an rc-switch number, or nullptr when there
+ * is none. The inverse of the table parse() reads, and just as short: only
+ * the mappings that are defensible are in it.
+ */
+const char* protocolNameFor(uint16_t rcSwitch);
+
+/**
+ * Render a `.sub` key file into `buf`.
+ *
+ * The inverse of parse(), and the easy direction: every field has one
+ * spelling, so there is nothing here to guess at. Returns the number of
+ * bytes written, not counting the terminator, or 0 if `buf` is too small or
+ * `protocol` has no name, which is the case parse() leaves as 0 and which
+ * cannot be written without inventing one.
+ *
+ * `te` of 0 omits the TE line rather than writing a made-up value. Pueo's
+ * record has no room to store TE, and a reader that needs one is better off
+ * applying its own default than trusting ours.
+ *
+ * Writes text and nothing else: no SD, no display, no radio, for the same
+ * reason parse() does not.
+ */
+size_t write(char* buf, size_t cap, uint32_t frequency, uint32_t value,
+             uint16_t bitLength, uint16_t protocol, uint16_t te);
 
 }  // namespace SubFile

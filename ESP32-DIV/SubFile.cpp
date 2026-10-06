@@ -1,5 +1,6 @@
 #include "SubFile.h"
 
+#include <stdio.h>
 #include <string.h>
 
 namespace SubFile {
@@ -32,6 +33,25 @@ const ProtoMap kProtocols[] = {
   {"Princeton", 1},
 };
 constexpr size_t kProtocolCount = sizeof(kProtocols) / sizeof(kProtocols[0]);
+
+/* Protocols that carry a counter, so a capture of one is good for exactly
+ * nothing: the receiver has already moved past it by the time you transmit.
+ *
+ * These are named rather than detected, because the detection would be
+ * guesswork and the names are not. They are all longer than 32 bits, so
+ * they were already refused on bit count, and "bit count out of range" is
+ * a true statement that sends somebody looking for the wrong problem. This
+ * list exists to change the sentence, not the outcome.
+ *
+ * Nothing here helps transmit one. Saying a capture will not replay is the
+ * opposite of that. */
+const char* kRollingCodes[] = {
+  "KeeLoq", "Somfy Telis", "Somfy Keytis", "Star Line", "Security+ 2.0",
+  "Security+ 1.0", "Nice Flor S", "CAME Atomo", "AN-Motors", "Alutech AT-4N",
+  "Hormann BiSecur", "Faac SLH", "Centurion Nova",
+};
+constexpr size_t kRollingCount =
+    sizeof(kRollingCodes) / sizeof(kRollingCodes[0]);
 
 bool isSpace(char c) {
   return c == ' ' || c == '\t' || c == '\r';
@@ -250,6 +270,15 @@ Result parse(const char* text, size_t len, Parsed* out) {
   if (freq < kFreqMinHz || freq > kFreqMaxHz) {
     return Result::FreqOutOfRange;
   }
+  /* Before the bit-count test on purpose. Every one of these is longer
+   * than 32 bits, so this is the same refusal with a sentence that says
+   * what to do next, which is not "try a shorter capture". */
+  for (size_t i = 0; i < kRollingCount; i++) {
+    if (strcmp(out->protocolName, kRollingCodes[i]) == 0) {
+      return Result::RollingCode;
+    }
+  }
+
   if (bits == 0 || bits > 32) {
     return Result::TooManyBits;
   }
@@ -267,6 +296,57 @@ Result parse(const char* text, size_t len, Parsed* out) {
   return Result::Ok;
 }
 
+const char* protocolNameFor(uint16_t rcSwitch) {
+  if (rcSwitch == 0) return nullptr;
+  for (size_t i = 0; i < kProtocolCount; i++) {
+    if (kProtocols[i].rcSwitch == rcSwitch) return kProtocols[i].name;
+  }
+  return nullptr;
+}
+
+size_t write(char* buf, size_t cap, uint32_t frequency, uint32_t value,
+             uint16_t bitLength, uint16_t protocol, uint16_t te) {
+  if (buf == nullptr || cap == 0) return 0;
+
+  const char* name = protocolNameFor(protocol);
+  if (name == nullptr) return 0;
+  if (bitLength == 0 || bitLength > 32) return 0;
+  if (frequency < kFreqMinHz || frequency > kFreqMaxHz) return 0;
+
+  /* Key is eight bytes, most significant first, whatever the bit count: a
+   * 24-bit key is five zero bytes and then the three that carry it. */
+  uint8_t key[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  key[4] = (uint8_t)((value >> 24) & 0xFF);
+  key[5] = (uint8_t)((value >> 16) & 0xFF);
+  key[6] = (uint8_t)((value >> 8) & 0xFF);
+  key[7] = (uint8_t)(value & 0xFF);
+
+  /* OOK at 650 us is the preset Princeton captures are written with, and
+   * the only protocol this can name is Princeton. If that table ever grows
+   * past one entry, the preset has to come from the table with it. */
+  int n = snprintf(
+      buf, cap,
+      "Filetype: Flipper SubGhz Key File\n"
+      "Version: 1\n"
+      "Frequency: %lu\n"
+      "Preset: FuriHalSubGhzPresetOok650Async\n"
+      "Protocol: %s\n"
+      "Bit: %u\n"
+      "Key: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+      (unsigned long)frequency, name, (unsigned)bitLength,
+      key[0], key[1], key[2], key[3], key[4], key[5], key[6], key[7]);
+
+  if (n < 0 || (size_t)n >= cap) return 0;
+
+  if (te != 0) {
+    const int m = snprintf(buf + n, cap - (size_t)n, "TE: %u\n",
+                           (unsigned)te);
+    if (m < 0 || (size_t)(n + m) >= cap) return 0;
+    n += m;
+  }
+  return (size_t)n;
+}
+
 const char* resultText(Result r) {
   switch (r) {
     case Result::Ok:             return "ok";
@@ -275,6 +355,7 @@ const char* resultText(Result r) {
     case Result::MissingField:   return "missing Frequency/Bit/Key";
     case Result::BadField:       return "unreadable field";
     case Result::TooManyBits:    return "bit count out of range";
+    case Result::RollingCode:    return "rolling code, will not replay";
     case Result::FreqOutOfRange: return "frequency out of range";
   }
   return "unknown";
