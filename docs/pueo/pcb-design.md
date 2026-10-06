@@ -735,12 +735,26 @@ LiPo pack        45 x 34         ?            depends on the cell; 6-10 for
                                               a 2000 mAh pouch
 ```
 
-**The S7V8F3 has four pins, not three.** `SHDN`, `VIN`, `GND`, `VOUT`, in a
-row along one edge at 0.1 inch spacing. The netlist connects three of them and
-that is correct electrically, because Pololu say `SHDN` may be tied to `VIN`
-or left disconnected to leave the board permanently enabled. It still needs a
-pad. A three-pad footprint for a four-pin part is the kind of thing that is
-free to fix now and a scalpel later.
+**The S7V8F3 has four pins, not three.** In a row along one edge at 0.1 inch
+spacing, and confirmed on the part in hand, 2026-10-06:
+
+```
+VOUT   GND   VIN   SHDN
+```
+
+The netlist connects three of them and that is correct electrically, because
+Pololu say `SHDN` may be tied to `VIN` or left disconnected to leave the board
+permanently enabled. It still needs a pad. A three-pad footprint for a
+four-pin part is the kind of thing that is free to fix now and a scalpel
+later.
+
+**Read that order off the silkscreen, not off this page.** A four-pin inline
+footprint has two ways to be right and one of them is backwards: the same part
+is `VOUT GND VIN SHDN` from one end and `SHDN VIN GND VOUT` from the other,
+and both sentences are true. This note used to give the second one with no
+reference edge, which is free to carry in prose and expensive on a board,
+where it puts `VIN` on the `VOUT` pad. The silkscreen labels every pin, so the
+board is its own authority and nothing here needs to be trusted.
 
 Worth knowing for a second spin: `SHDN` is how the RF rail could be switched
 off in software, which would take the radios' idle draw out of the budget
