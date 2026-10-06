@@ -60,12 +60,36 @@ The two do not line up, so only one mapping is made:
 | Flipper name | rc-switch | why |
 |---|---|---|
 | `Princeton` | 1 | PT2262/EV1527, and rc-switch protocol 1 is the same thing |
+| a rolling code | refused | `RollingCode`, see below |
 | everything else | **0** | the name is kept in `protocolName`; no number is guessed |
 
-CAME, NICE FLO, Holtek, Linear, KeeLoq and the rest parse fine and come back
-with `protocol = 0`, meaning "here is the name, decide for yourself". A
-guessed number would transmit something subtly wrong while presenting as
-correct, which is the failure this project keeps declining to build.
+CAME, NICE FLO, Holtek, Linear and the rest are fixed-code and parse fine,
+coming back with `protocol = 0`, meaning "here is the name, decide for
+yourself". A guessed number would transmit something subtly wrong while
+presenting as correct, which is the failure this project keeps declining to
+build.
+
+`protocol = 0` is an absence, not a number, and three places have to keep
+saying so, because rc-switch does not: `setProtocol()` clamps anything below
+1 up to 1, so an unguarded send transmits Princeton timing under another
+protocol's name and looks like it worked. The import names the protocol it
+cannot send, the browser shows `none` rather than a digit, and
+`transmitProfile()` refuses outright. `tools/check_sub_parse.py` asserts all
+three, and that the refusal comes before `setProtocol`.
+
+### Rolling codes are a different answer
+
+KeeLoq, Somfy, Star Line, Security+, Nice Flor-S, CAME Atomo and the rest
+carry a counter, so a captured one is good for nothing: the receiver has
+moved past it before you can transmit. They are named in `kRollingCodes`
+rather than detected, because the names are facts and the detection would
+be guesswork.
+
+Every one is longer than 32 bits, so they already failed on `Bit` and the
+screen said "bit count out of range". That is true and sends somebody
+looking for a shorter capture. The refusal is checked before the bit count
+now, so the message is the reason. This changes the sentence, not the
+outcome, and nothing in it helps transmit one.
 
 Even Princeton is approximate. rc-switch protocol 1 assumes a 350 µs pulse
 and the file carries its own `TE`, usually nearer 400. `TE` is parsed and
@@ -86,33 +110,65 @@ the same sense a probe request is.
   number is refused rather than wrapped.
 - Every string field is copied into a fixed buffer, trimmed and terminated.
 
-`tools/check_sub_parse.py` transcribes `parse()` into Python and runs 60,891
-checks: the real-world cases above, RAW three ways, each required field
-dropped in turn, the range edges, 60,000 fuzz inputs, and every single-byte
-mutation of a valid file against five replacement characters. Every input
-must produce one of the seven results and nothing else.
+`tools/check_sub_parse.py` transcribes `parse()` and `write()` into Python
+and runs 61,448 checks: the real-world cases above, RAW three ways, each
+required field dropped in turn, the range edges, every rolling-code name at
+both a plausible and an implausible bit count, 60,000 fuzz inputs, and every
+single-byte mutation of a valid file against five replacement characters.
+Every input must produce one of the eight results and nothing else.
 
-## Not wired up yet
+Both function bodies are pinned by hash, so changing the C without bringing
+the transcription with it fails rather than drifting.
 
-Nothing calls `SubFile::parse()`. The build size is unchanged because the
-linker garbage-collects it.
+## Where it is wired
 
-Wiring it in means more than calling the parser. `saveProfile()`
-(`ESP32-DIV/subghz.cpp:1105`) is UI-bound (it reads globals and drives the
-screen rather than taking a profile as an argument), and
-`importProfilesFromSD()` handles only Pueo's own binary format, header magic
-and all. There are also only `MAX_PROFILES = 5` slots in EEPROM, so an
-import has to ask which one it is replacing.
+**SUBGHZ > Import .sub** lists `.sub` files in `/pueo/subghz` and imports
+the selected one. The order is parse, make room, store, so the steps that
+can fail happen before anything is written. The profile name is the
+filename without its extension: a `.sub` carries no name of its own, and
+prompting for one would put a keyboard between choosing a file and finding
+out whether it parses.
 
-That is a UI change, and it is kept separate from the parser deliberately,
-the same way EAPOL went: the part that can be tested on a host lands first
-and is proved, then the part that can only be judged on hardware.
+Getting there took two changes under the UI. The profile record had been
+declared three times, so an import had no single type to write through, and
+`saveProfile()` could not store anything without also prompting and drawing.
+It is split into `makeRoomForProfile`, `makeProfile` and `storeProfile`,
+and `tools/check_profile_record.py` pins both the record layout and that
+seam.
+
+There are `MAX_PROFILES = 5` slots. A sixth import exports the five to the
+card and starts again rather than asking which one to overwrite, and the
+screen says when that happened.
+
+No Stealth gate on either file screen: they read a file and write an EEPROM
+record, and there is nothing there to refuse.
 
 ## Writing `.sub`
 
-Not done. Export is the more useful direction of the two (a Pueo capture
-that opens on a Flipper), and it is easier, because it is formatting rather
-than parsing. It needs a `Preset` name chosen for the CC1101 settings
-actually used, and a decision about what to write in `Protocol` for a
-capture whose rc-switch number has no Flipper equivalent, which is the same
-mapping problem from the other side.
+`SubFile::write()` renders a key file, and **SUBGHZ > Export .sub** writes
+one per saved profile to `/pueo/subghz/<name>.sub`. This matters more than
+it sounds: a capture otherwise leaves this device only as a packed binary
+nothing else reads, and the five-slot rotation pushes older ones into that
+format as new ones arrive.
+
+It is the easy direction. Every field has exactly one spelling, so there is
+nothing to guess:
+
+- `Key` is eight bytes, most significant first, whatever the bit count. A
+  24-bit key is five zero bytes and then the three that carry it.
+- `Preset` is `FuriHalSubGhzPresetOok650Async`, which is what the one
+  protocol this can name is captured with. If that table grows past one
+  entry, the preset has to come from the table with it.
+- `Protocol` is the reverse of the mapping above, via `protocolNameFor()`.
+  A profile with `protocol = 0` cannot be written, because the record never
+  stored the name, and inventing one is the same failure from the other
+  side. The export screen marks those rows `(no protocol)` rather than
+  waiting for the press to say so.
+- `TE` is omitted rather than invented. The EEPROM budget is exactly full
+  at five 28-byte records, so there is nowhere to store one, and a reader
+  that needs `TE` is better off applying its own default than trusting a
+  guess from here.
+
+The check round-trips `write()` through `parse()` at every bit count from 1
+to 32 across four frequencies and insists the values come back unchanged,
+which is the only property of a writer worth asserting.

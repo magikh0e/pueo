@@ -147,6 +147,14 @@ namespace SubImport {
   void setup();
   void loop();
 }
+namespace SubExport {
+  void setup();
+  void loop();
+}
+namespace FreqScan {
+  void setup();
+  void loop();
+}
 
 namespace jammingdetector {
   void Setup();

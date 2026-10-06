@@ -33,6 +33,15 @@ namespace {
   constexpr size_t kSubghzFreqCount =
       sizeof(subghz_frequency_list) / sizeof(subghz_frequency_list[0]);
 
+  /* The status line for the two file screens.
+   *
+   * Import and Export are the same screen pointing opposite ways and
+   * cannot both be up, so they share one. That is not tidiness: DRAM on
+   * this part is full enough that adding Export with its own String
+   * overflowed dram0_0_seg by 16 bytes and the image would not link. */
+  String subghzFileStatus;
+  bool   subghzFileStatusWarn = false;
+
   static constexpr const char* SUBGHZ_DIR = SUBGHZ_SD_DIR;
   static constexpr const char* SUBGHZ_EXPORT_PREFIX = SUBGHZ_SD_DIR "/profiles_";
   static constexpr const char* SUBGHZ_CURRENT_PATH =
@@ -3984,8 +3993,6 @@ struct Entry {
 std::vector<Entry> s_files;
 int      s_sel = 0;
 int      s_top = 0;
-String   s_status;
-bool     s_statusWarn = false;
 bool     s_needRedraw = true;
 bool     s_mounted = false;   // this screen's own, not another feature's
 
@@ -4028,8 +4035,8 @@ static void scan() {
     s_mounted = isSDCardAvailable();
   }
   if (!s_mounted) {
-    s_status = "No SD card";
-    s_statusWarn = true;
+    subghzFileStatus = "No SD card";
+    subghzFileStatusWarn = true;
     return;
   }
 
@@ -4045,8 +4052,8 @@ static void scan() {
   File dir = SD.open(SUBGHZ_SD_DIR);
   if (!dir || !dir.isDirectory()) {
     if (dir) dir.close();
-    s_status = String("Cannot open ") + SUBGHZ_SD_DIR;
-    s_statusWarn = true;
+    subghzFileStatus = String("Cannot open ") + SUBGHZ_SD_DIR;
+    subghzFileStatusWarn = true;
     return;
   }
 
@@ -4070,11 +4077,11 @@ static void scan() {
             [](const Entry& a, const Entry& b) { return a.name < b.name; });
 
   if (s_files.empty()) {
-    s_status = "No .sub files";
-    s_statusWarn = false;
+    subghzFileStatus = "No .sub files";
+    subghzFileStatusWarn = false;
   } else {
-    s_status = String(s_files.size()) + " file(s)";
-    s_statusWarn = false;
+    subghzFileStatus = String(s_files.size()) + " file(s)";
+    subghzFileStatusWarn = false;
   }
 }
 
@@ -4090,15 +4097,15 @@ static void importSelected() {
 
   File fh = SD.open(it.path.c_str(), FILE_READ);
   if (!fh) {
-    s_status = "Cannot open file";
-    s_statusWarn = true;
+    subghzFileStatus = "Cannot open file";
+    subghzFileStatusWarn = true;
     return;
   }
   const size_t len = fh.size();
   if (len == 0 || len > 8192) {
     fh.close();
-    s_status = (len == 0) ? "File is empty" : "File too large";
-    s_statusWarn = true;
+    subghzFileStatus = (len == 0) ? "File is empty" : "File too large";
+    subghzFileStatusWarn = true;
     return;
   }
 
@@ -4110,16 +4117,16 @@ static void importSelected() {
   SubFile::Parsed parsed{};
   const SubFile::Result r = SubFile::parse(buf.data(), got, &parsed);
   if (r != SubFile::Result::Ok) {
-    s_status = SubFile::resultText(r);
-    s_statusWarn = true;
+    subghzFileStatus = SubFile::resultText(r);
+    subghzFileStatusWarn = true;
     return;
   }
 
   String err;
   bool rotated = false;
   if (!replayat::makeRoomForProfile(&err, &rotated)) {
-    s_status = "Full, export failed";
-    s_statusWarn = true;
+    subghzFileStatus = "Full, export failed";
+    subghzFileStatusWarn = true;
     return;
   }
 
@@ -4135,18 +4142,18 @@ static void importSelected() {
    * nothing. Name the protocol: which decoder is missing is the actionable
    * part. */
   if (parsed.protocol == 0) {
-    s_status = String("Stored, ") +
+    subghzFileStatus = String("Stored, ") +
                (parsed.protocolName[0] != '\0' ? parsed.protocolName
                                                 : "that protocol") +
                " cannot send";
-    s_statusWarn = true;
+    subghzFileStatusWarn = true;
     return;
   }
 
-  s_status = rotated ? "Imported, 5 sent to SD"
+  subghzFileStatus = rotated ? "Imported, 5 sent to SD"
                      : String("Imported to slot ")
                            + String(replayat::profileCount);
-  s_statusWarn = false;
+  subghzFileStatusWarn = false;
 }
 
 static void draw() {
@@ -4163,9 +4170,9 @@ static void draw() {
   tft.print("Import .sub");
 
   if (s_files.empty()) {
-    tft.setTextColor(s_statusWarn ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
+    tft.setTextColor(subghzFileStatusWarn ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
     tft.setCursor(6, top + 6);
-    tft.print(s_status);
+    tft.print(subghzFileStatus);
     tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
     tft.setCursor(6, top + 20);
     tft.print("put files in ");
@@ -4188,9 +4195,9 @@ static void draw() {
     tft.print(n);
   }
 
-  tft.setTextColor(s_statusWarn ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
+  tft.setTextColor(subghzFileStatusWarn ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
   tft.setCursor(6, bottom - 12);
-  tft.print(s_status);
+  tft.print(subghzFileStatus);
 }
 
 /* The touch nav bar, which on this board is the only input there is.
@@ -4295,6 +4302,253 @@ void loop() {
 
 }  // namespace SubImport
 
+namespace SubExport {
+
+/* Writing a saved profile out as a Flipper `.sub`.
+ *
+ * The inverse of SubImport, and the easier half: SubFile::write has nothing
+ * to guess at, because every field in the record has exactly one spelling
+ * in the format. What makes it worth having is that the alternative is a
+ * packed binary only this firmware reads, and the five-slot EEPROM pushes
+ * older captures into that format as new ones arrive.
+ *
+ * No radio, so no Stealth gate. This reads EEPROM and writes one file.
+ */
+
+constexpr int kRowH = 12;
+
+int    s_sel = 0;
+int    s_top = 0;
+bool   s_needRedraw = true;
+bool   s_mounted = false;
+
+/* Strip anything that has no business in a filename. A profile name comes
+ * from a keyboard or from another file's stem, so it is not trusted to be
+ * one. */
+static String safeFileName(const char* name) {
+  String out;
+  for (const char* p = name; *p != '\0' && out.length() < MAX_NAME_LENGTH; p++) {
+    const char c = *p;
+    const bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                    (c >= '0' && c <= '9') || c == '-' || c == '_';
+    out += ok ? c : '_';
+  }
+  if (out.length() == 0) out = "profile";
+  return out;
+}
+
+static bool mountCard() {
+  /* The CC1101 and the card share the SPI bus on this board, so a plain
+   * SD.open fails after any sub-GHz feature has run. */
+  if (s_mounted && SD.exists("/")) return true;
+#if defined(CC1101_CS)
+  pinMode(CC1101_CS, OUTPUT);
+  digitalWrite(CC1101_CS, HIGH);
+#endif
+  restoreSdAfterSharedSpi();
+  s_mounted = isSDCardAvailable();
+  return s_mounted;
+}
+
+static void exportSelected() {
+  replayat::readProfileCount();
+  if (replayat::profileCount == 0) {
+    subghzFileStatus = "No profiles";
+    subghzFileStatusWarn = true;
+    return;
+  }
+  if (s_sel < 0 || s_sel >= (int)replayat::profileCount) {
+    subghzFileStatus = "No such slot";
+    subghzFileStatusWarn = true;
+    return;
+  }
+
+  SubGhzProfile p{};
+  EEPROM.get(ADDR_PROFILE_START + (s_sel * PROFILE_SIZE), p);
+  p.name[MAX_NAME_LENGTH - 1] = '\0';
+
+  /* TE is 0 because the record has no room for it: the EEPROM budget is
+   * exactly full at five 28-byte profiles, so there is nowhere to put one
+   * without moving the format. write() omits the line rather than
+   * inventing a value, and a reader that needs TE is better off applying
+   * its own default than trusting a guess from here. */
+  char buf[256];
+  const size_t n = SubFile::write(buf, sizeof(buf), p.frequency, p.value,
+                                  p.bitLength, p.protocol, 0);
+  if (n == 0) {
+    /* The only way this fails on a stored record is protocol 0, which is a
+     * .sub imported from a protocol this firmware will not name. It cannot
+     * be written back without inventing the name it never stored. */
+    subghzFileStatus = (p.protocol == 0) ? "No protocol name to write"
+                                 : "Record will not render";
+    subghzFileStatusWarn = true;
+    return;
+  }
+
+  if (!mountCard()) {
+    subghzFileStatus = "No SD card";
+    subghzFileStatusWarn = true;
+    return;
+  }
+  if (!SD.exists(SUBGHZ_SD_DIR)) {
+    sdEnsureDir(SUBGHZ_SD_DIR);
+  }
+
+  const String path =
+      String(SUBGHZ_SD_DIR) + "/" + safeFileName(p.name) + ".sub";
+  if (SD.exists(path.c_str())) SD.remove(path.c_str());
+
+  File fh = SD.open(path.c_str(), FILE_WRITE);
+  if (!fh) {
+    subghzFileStatus = "Cannot open for write";
+    subghzFileStatusWarn = true;
+    return;
+  }
+  const size_t put = fh.write((const uint8_t*)buf, n);
+  fh.close();
+
+  if (put != n) {
+    subghzFileStatus = "Short write";
+    subghzFileStatusWarn = true;
+    return;
+  }
+
+  subghzFileStatus = String("Wrote ") + safeFileName(p.name) + ".sub";
+  subghzFileStatusWarn = false;
+}
+
+static void draw() {
+  subghzClearBody(TFT_BLACK);
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+
+  const int top = 30 + replayat::yshift;
+  const int bottom = subghzContentBottom();
+  const int rows = (bottom - top - 14) / kRowH;
+
+  tft.setTextColor(UI_TEXT, TFT_BLACK);
+  tft.setCursor(6, top - 12);
+  tft.print("Export .sub");
+
+  replayat::readProfileCount();
+  const int count = (int)replayat::profileCount;
+
+  if (count == 0) {
+    tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+    tft.setCursor(6, top + 6);
+    tft.print("No saved profiles");
+    tft.setCursor(6, top + 20);
+    tft.print("capture one, or import a .sub");
+    return;
+  }
+
+  if (s_sel >= count) s_sel = count - 1;
+  if (s_sel < 0) s_sel = 0;
+  if (s_sel < s_top) s_top = s_sel;
+  if (rows > 0 && s_sel >= s_top + rows) s_top = s_sel - rows + 1;
+
+  for (int i = 0; i < rows && (s_top + i) < count; i++) {
+    const int idx = s_top + i;
+    const int y = top + i * kRowH;
+    const bool on = (idx == s_sel);
+
+    SubGhzProfile p{};
+    EEPROM.get(ADDR_PROFILE_START + (idx * PROFILE_SIZE), p);
+    p.name[MAX_NAME_LENGTH - 1] = '\0';
+
+    tft.setTextColor(on ? TFT_BLACK : UI_TEXT, on ? UI_ICON : TFT_BLACK);
+    tft.setCursor(6, y);
+    tft.print(on ? ">" : " ");
+    tft.print(p.name);
+
+    /* Say up front which rows cannot be written, rather than on the press.
+     * A profile with no protocol name is the one case write() refuses. */
+    if (p.protocol == 0) {
+      tft.setTextColor(on ? TFT_BLACK : UI_WARN, on ? UI_ICON : TFT_BLACK);
+      tft.print("  (no protocol)");
+    }
+  }
+
+  tft.setTextColor(subghzFileStatusWarn ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
+  tft.setCursor(6, bottom - 12);
+  tft.print(subghzFileStatus);
+}
+
+/* The touch nav bar, which on this board is the only input there is. */
+static void handleNavButtons() {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+    feature_exit_requested = true;
+    return;
+  }
+
+  replayat::readProfileCount();
+  const int count = (int)replayat::profileCount;
+  if (count == 0) {
+    return;
+  }
+
+  if (isTouchNavButtonPressedEdge(BTN_UP)) {
+    s_sel = (s_sel - 1 + count) % count;
+    s_needRedraw = true;
+    subghzWaitNavRelease(BTN_UP);
+  }
+  if (isTouchNavButtonPressedEdge(BTN_DOWN)) {
+    s_sel = (s_sel + 1) % count;
+    s_needRedraw = true;
+    subghzWaitNavRelease(BTN_DOWN);
+  }
+  if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
+    exportSelected();
+    s_needRedraw = true;
+    subghzWaitNavRelease(BTN_RIGHT);
+  }
+}
+
+void setup() {
+  setTouchButtonInputEnabled(true);
+  setTouchNavLabels("", "Next", "Exit", "Prev", "Export");
+
+  EEPROM.begin(EEPROM_SIZE);
+  replayat::loadProfileCount();
+
+  s_sel = 0;
+  s_top = 0;
+  subghzFileStatus = "";
+  subghzFileStatusWarn = false;
+  s_needRedraw = true;
+
+  subghzClearBody(TFT_BLACK);
+  setupTouchscreen();
+  float v = readBatteryVoltage();
+  drawStatusBar(v, true);
+  replayat::uiDrawn = false;
+  replayat::runUI();
+  subghzRedrawNavChrome();
+}
+
+void loop() {
+  if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+    feature_exit_requested = true;
+    return;
+  }
+
+  maintainTouchNavBar();
+  replayat::runUI();
+  handleNavButtons();
+
+  if (s_needRedraw) {
+    s_needRedraw = false;
+    draw();
+    subghzRedrawNavChrome();
+  }
+  delay(20);
+}
+
+}  // namespace SubExport
+
 namespace jammingdetector {
 
 static constexpr uint16_t JD_SAMPLES = ESP32DIV_JD_RSSI_SAMPLES;
@@ -4362,7 +4616,7 @@ static bool s_chromeDrawn = false;
 static bool s_jdUiDrawn = false;
 static bool s_waveHasPrev = false;
 static int16_t s_wavePrevY[kWaveW];
-static uint8_t s_statusState = 255;
+static uint8_t subghzFileStatusState = 255;
 
 struct JdDisp {
   bool valid = false;
@@ -4470,7 +4724,7 @@ static void jdDrawValueCell(int x, int y, int w, const char* text, uint16_t colo
 
 static void jdInvalidateContent() {
   s_chromeDrawn = false;
-  s_statusState = 255;
+  subghzFileStatusState = 255;
   s_disp.valid = false;
   s_waveHasPrev = false;
   waveWrite = 0;
@@ -4658,15 +4912,15 @@ static void jdDrawStaticChrome() {
 
   s_chromeDrawn = true;
   s_disp.valid = false;
-  s_statusState = 255;
+  subghzFileStatusState = 255;
 }
 
 static void jdDrawStatusBox(bool jam, bool activity) {
   const uint8_t st = jam ? 2 : (activity ? 1 : 0);
-  if (st == s_statusState && s_disp.valid) {
+  if (st == subghzFileStatusState && s_disp.valid) {
     return;
   }
-  s_statusState = st;
+  subghzFileStatusState = st;
 
   uint16_t bg = jam ? ORANGE : (activity ? UI_WARN : UI_OK);
   uint16_t fg = (jam || activity) ? TFT_BLACK : UI_FG;
@@ -4919,3 +5173,212 @@ void Loop() {
 }
 
 }  // namespace jammingdetector
+
+namespace FreqScan {
+
+/* Sweeping the frequency list and showing where the energy is.
+ *
+ * The problem this answers: Replay Attack wants a frequency chosen before
+ * it will listen, and a remote on the wrong one is indistinguishable from
+ * a remote that is not transmitting. Twelve guesses, each ambiguous.
+ *
+ * Peak hold is the part that makes it usable. A key fob transmits for
+ * perhaps 200 ms; an instantaneous bar chart shows nothing by the time you
+ * have looked from the remote to the screen. The peak decays slowly so a
+ * burst stays readable and a steady carrier still stands out from it.
+ *
+ * Receive only: tune, read RSSI, repeat. Nothing to refuse under Stealth.
+ */
+
+constexpr int kRowH       = 13;
+constexpr int kSettleUs   = 1200;   // after a retune, before the first read
+constexpr int kSamples    = 6;      // per frequency per sweep
+constexpr int kRssiFloor  = -110;   // bar empty at or below
+constexpr int kRssiCeil   = -20;    // bar full at or above
+constexpr int kDecayDbPerSweep = 1;
+
+int8_t  s_peak[kSubghzFreqCount];
+bool    s_held = false;
+bool    s_needFull = true;
+uint8_t s_strongest = 0;
+
+static void resetPeaks() {
+  for (size_t i = 0; i < kSubghzFreqCount; i++) {
+    s_peak[i] = (int8_t)kRssiFloor;
+  }
+  s_strongest = 0;
+}
+
+static void sweep() {
+  int best = kRssiFloor;
+  uint8_t bestIdx = 0;
+
+  for (size_t i = 0; i < kSubghzFreqCount; i++) {
+    ELECHOUSE_cc1101.setSidle();
+    ELECHOUSE_cc1101.setMHZ(subghz_frequency_list[i] / 1000000.0);
+    ELECHOUSE_cc1101.SetRx();
+    delayMicroseconds(kSettleUs);
+
+    int peak = -127;
+    for (int n = 0; n < kSamples; n++) {
+      const int dbm = ELECHOUSE_cc1101.getRssi();
+      if (dbm > peak) peak = dbm;
+      delayMicroseconds(150);
+    }
+    if (peak < kRssiFloor) peak = kRssiFloor;
+    if (peak > kRssiCeil)  peak = kRssiCeil;
+
+    /* Hold the peak, and let it fall slowly rather than snapping back, so
+     * a burst that has already ended is still visible. The decay is what
+     * makes one array enough: a signal that stops is shown going away
+     * rather than needing a separate live reading beside it. */
+    if (peak > s_peak[i]) {
+      s_peak[i] = (int8_t)peak;
+    } else if (s_peak[i] > kRssiFloor) {
+      s_peak[i] = (int8_t)(s_peak[i] - kDecayDbPerSweep);
+    }
+
+    if (s_peak[i] > best) {
+      best = s_peak[i];
+      bestIdx = (uint8_t)i;
+    }
+  }
+  s_strongest = bestIdx;
+}
+
+static int barWidthFor(int dbm, int fullW) {
+  if (dbm <= kRssiFloor) return 0;
+  if (dbm >= kRssiCeil)  return fullW;
+  return ((dbm - kRssiFloor) * fullW) / (kRssiCeil - kRssiFloor);
+}
+
+static void draw() {
+  const int top    = 30 + replayat::yshift;
+  const int bottom = subghzContentBottom();
+
+  if (s_needFull) {
+    subghzClearBody(TFT_BLACK);
+    s_needFull = false;
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    tft.setTextColor(UI_TEXT, TFT_BLACK);
+    tft.setCursor(6, top - 12);
+    tft.print("Freq Analyser");
+    tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+    tft.setCursor(150, top - 12);
+    tft.print("peak hold, dBm");
+  }
+
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+
+  const int labelX = 6;
+  const int barX   = 62;
+  const int dbmX   = PUEO_SCREEN_W - 40;
+  const int fullW  = dbmX - barX - 8;
+
+  for (size_t i = 0; i < kSubghzFreqCount; i++) {
+    const int y = top + (int)i * kRowH;
+    if (y + kRowH > bottom) break;
+
+    const bool best = ((uint8_t)i == s_strongest) &&
+                      (s_peak[i] > kRssiFloor);
+
+    tft.setTextColor(best ? UI_ICON : UI_DIM_TEXT, TFT_BLACK);
+    tft.setCursor(labelX, y + 2);
+    tft.printf("%7.2f", subghz_frequency_list[i] / 1000000.0);
+
+    const int wPeak = barWidthFor(s_peak[i], fullW);
+
+    /* Paint the bar, then black only the part beyond it. Clearing the
+     * whole row first and filling it after blinks every bar on every
+     * sweep, which at this rate reads as the display being broken. */
+    if (wPeak > 0) {
+      tft.fillRect(barX, y + 2, wPeak, 8, best ? UI_ICON : UI_DIM_TEXT);
+      tft.drawFastVLine(barX + wPeak - 1, y + 1, 10, UI_WARN);
+    }
+    if (wPeak < fullW) {
+      tft.fillRect(barX + wPeak, y + 1, fullW - wPeak, 10, TFT_BLACK);
+    }
+
+    tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+    tft.setCursor(dbmX, y + 2);
+    tft.printf("%4d", (int)s_peak[i]);
+  }
+
+  tft.setTextColor(s_held ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
+  tft.setCursor(6, bottom - 11);
+  if (s_held) {
+    tft.print("HELD                          ");
+  } else {
+    tft.printf("strongest %.2f MHz            ",
+               subghz_frequency_list[s_strongest] / 1000000.0);
+  }
+}
+
+static void handleNavButtons() {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+    feature_exit_requested = true;
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_UP)) {
+    resetPeaks();
+    s_needFull = true;
+    subghzWaitNavRelease(BTN_UP);
+  }
+  if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
+    s_held = !s_held;
+    subghzWaitNavRelease(BTN_RIGHT);
+  }
+}
+
+void setup() {
+  if (!cc1101Ready("Freq Analyser")) return;
+
+  setTouchButtonInputEnabled(true);
+  setTouchNavLabels("", "Reset", "Exit", "", "Hold");
+
+  reclaimSharedSpiBus();
+  SpiBus::claim(SpiBus::Dev::Cc1101);
+
+  ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
+  ELECHOUSE_cc1101.Init();
+  ELECHOUSE_cc1101.setModulation(2);
+  ELECHOUSE_cc1101.setGDO(CC1101_GDO0, CC1101_GDO2);
+  ELECHOUSE_cc1101.SetRx();
+
+  resetPeaks();
+  s_held = false;
+  s_needFull = true;
+
+  subghzClearBody(TFT_BLACK);
+  setupTouchscreen();
+  float v = readBatteryVoltage();
+  drawStatusBar(v, true);
+  replayat::uiDrawn = false;
+  replayat::runUI();
+  subghzRedrawNavChrome();
+}
+
+void loop() {
+  if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+    feature_exit_requested = true;
+    return;
+  }
+
+  maintainTouchNavBar();
+  replayat::runUI();
+  handleNavButtons();
+
+  if (!s_held) {
+    sweep();
+  }
+  draw();
+  subghzRedrawNavChrome();
+  delay(10);
+}
+
+}  // namespace FreqScan

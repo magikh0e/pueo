@@ -205,6 +205,51 @@ def main():
             ok("  and refuses before it touches the radio", gate < radio,
                "the gate is after the first radio call")
 
+    # ── the ungated SubGHz screens, and why each is allowed to be ─────
+    #
+    # Not being in TRANSMITTERS is a claim, and the way a feature comes to
+    # be missing from that list wrongly is by not transmitting on the day
+    # somebody wrote it. So assert the premise: the two file screens touch
+    # no radio, and the analyser tunes and reads but never keys.
+    print("\nthe ungated SubGHz screens do not transmit:")
+    sub = read("subghz.cpp")
+
+    def ns_body(name):
+        """Text between `namespace X {` and its matching close comment."""
+        open_at = sub.find("namespace %s {" % name)
+        if open_at < 0:
+            return None
+        close_at = sub.find("}  // namespace %s" % name, open_at)
+        return sub[open_at:close_at] if close_at > open_at else None
+
+    # Anything that keys the radio. enableTransmit arms rc-switch's pin,
+    # SetTx puts the CC1101 in transmit, and send() is the one that emits.
+    TX_CALLS = ("SetTx(", "enableTransmit(", "mySwitch.send(",
+                "setRepeatTransmit(")
+    # Anything that touches the radio at all, transmit or not.
+    RADIO_CALLS = TX_CALLS + ("ELECHOUSE_cc1101.", "mySwitch.", "SpiBus::Dev::Cc1101")
+
+    for name in ("SubImport", "SubExport"):
+        body = ns_body(name)
+        hits = [c for c in RADIO_CALLS if body and c in body]
+        ok("%-12s touches no radio" % name,
+           bool(body) and not hits,
+           "no namespace %s found" % name if not body
+           else "it calls %s, so 'no Stealth gate' no longer holds"
+                % ", ".join(hits))
+
+    fs = ns_body("FreqScan")
+    tx_hits = [c for c in TX_CALLS if fs and c in fs]
+    ok("FreqScan    receives only",
+       bool(fs) and not tx_hits,
+       "no namespace FreqScan found" if not fs
+       else "it calls %s, so it transmits and needs a Stealth gate"
+            % ", ".join(tx_hits))
+    # And it really is using the radio, or the assertion above is vacuous.
+    ok("  and does use the radio, so that is not a vacuous pass",
+       bool(fs) and "ELECHOUSE_cc1101.getRssi()" in fs,
+       "FreqScan reads no RSSI; this check is asserting nothing")
+
     print("\nRFID is gated once, where all of it is launched:")
     ino = (SKETCH / "ESP32-DIV.ino").read_text(encoding="utf-8", errors="replace")
     rfid = func_body(ino, "static void otherRfidPlaceholderAction(int idx)")
