@@ -584,10 +584,10 @@ enclosure has.
 `tools/gen_netlist.py` emits into `dist/pcb/`:
 
 ```
-netlist.txt        17 nets, 73 connections, net by net
+netlist.txt        17 nets, 71 connections, net by net
 pueo-carrier.net   KiCad legacy netlist
 placement.csv      module centres in board coordinates
-bom.csv            25 parts
+bom.csv            26 parts
 ```
 
 Pins are named functionally (VCC, SCK, CSN), not numbered. Module pin numbers

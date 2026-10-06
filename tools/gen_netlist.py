@@ -99,6 +99,14 @@ NETS = [
     ("+5V_IN", [("J3", "1"), ("U3", "VIN"), ("C6", "1"), ("TP1", "1")],
      "from P1 pin 1, about 260 mA at full load, 0.5 mm"),
 
+    # SHDN is active low and internally pulled up, so an unlanded pad is a
+    # running converter. The test point is how the fourth pad exists without
+    # the trace to VIN that would spend the provision below.
+    ("RF_SHDN", [("U3", "SHDN"), ("TP3", "1")],
+     "the fourth pad. Floating, so the rail is on; pull it to GND and the "
+     "radios go dark. No GPIO reaches it today and none should be given one "
+     "that sits low out of reset"),
+
     ("+3V3_RF", [("U3", "VOUT"), ("J4", "VCC"), ("J5", "VCC"), ("J6", "VCC"),
                  ("J7", "VCC"),
                  ("C1", "1"), ("C2", "1"), ("C3", "1"), ("C4", "1"),
@@ -168,9 +176,10 @@ BOM = [
     ("U3",  1, "Pololu S7V8F3 buck-boost, 11.4 x 16.5 x 3.0 mm",
      "3.3 V from P1's 5 V, 2.7 to 11.8 V in, 1 A stepping down. Fixed output: "
      "no trimpot to set wrong, which is why it replaced an adjustable module. "
-     "FOUR pins at 0.1 inch: SHDN VIN GND VOUT. Only three are netted; SHDN "
-     "is left disconnected, which Pololu give as permanently enabled, and it "
-     "still wants a pad"),
+     "FOUR pins at 0.1 inch, VOUT GND VIN SHDN read off the silkscreen. All "
+     "four are netted now: SHDN goes to TP3 and nowhere else, which gives it "
+     "a pad while leaving it floating. It is active low with a pull-up, so "
+     "floating is enabled"),
     ("BT1", 1, "1S LiPo, optional",
      "NOT wired to this board. A cell here runs to the CYD's own BAT1, and "
      "the CYD will not start from it until SW1 is pressed"),
@@ -187,6 +196,7 @@ BOM = [
     ("C7",  1, "100uF electrolytic", "+3V3_RF bulk at the converter output"),
     ("TP1", 1, "Test point", "+5V_IN"),
     ("TP2", 1, "Test point", "+3V3_RF"),
+    ("TP3", 1, "Test point", "RF_SHDN, U3 pin 4"),
     ("TP3", 1, "Test point", "VSPI_SCK"),
     ("TP4", 1, "Test point", "VSPI_MISO"),
     ("TP5", 1, "Test point", "GND"),

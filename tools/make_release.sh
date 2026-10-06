@@ -197,6 +197,7 @@ INCLUDE=(
   "tools/check_oui_registry.py"
   "tools/check_nrf24_rpd.py"
   "tools/check_band_tag.py"
+  "tools/check_netlist_counts.py"
   "tools/render_screens.py"
   "tools/gen_netlist.py"
   "tools/make_bitmap.py"
