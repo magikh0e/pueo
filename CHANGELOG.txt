@@ -11,6 +11,59 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.39 - 2026-10-06
+-------------------
+
+  The Satellite Scanner draws without a sprite instead of refusing to draw.
+
+  * ON LOW MEMORY THE SCREEN WAS UNUSABLE.
+
+    When no sprite allocated, the panel printed "Display buffer failed" with
+    the largest free block and the size one needed, and stopped there.
+
+    It renders straight to the panel area now. renderPanelGx is a template
+    over its draw target and works on the TFT as well as on a sprite; a
+    viewport is what makes that true without touching the renderer, because
+    TFT_eSPI reports the viewport from width() and height() and offsets every
+    coordinate into it, so the panel-relative Y values land below the status
+    bar and fillScreen clips to the panel rather than wiping the bar.
+
+    The 800 ms retry above it still runs, so this is the degraded path rather
+    than a dead end and the screen upgrades itself as soon as a sprite fits.
+
+  * FROM UPSTREAM, AND HALF OF IT WAS ALREADY HERE.
+
+    cifertech/ESP32-DIV#263 by maprolim fixes the same thing upstream. Its
+    other half was already in this tree independently: kScanSpriteHMin is 96
+    against the 200 they lowered to 90, and the 8bpp retry bug they do not
+    mention was fixed when that constant was set, because each height used to
+    be tried at 8 and then at 16 and 16 needs twice the memory, so the second
+    attempt could never succeed after the first had just failed.
+
+  * WHAT THE FIFTH ARGUMENT DOES.
+
+    setViewport's vpDatum defaults to true and that default is the mechanism
+    rather than a detail: it is what makes width() return the viewport
+    instead of the screen. Read out of TFT_eSPI.cpp rather than assumed. With
+    it false the renderer would draw at screen scale inside a clipped window,
+    and the symptom would be a layout bug a long way from its cause.
+
+  * WHAT IT COSTS.
+
+    The card named the largest free block and the size a sprite needed. Those
+    were the two numbers worth having and serial is not visible from that
+    screen, so losing them is a real loss, taken on purpose: a panel that
+    draws beats a number explaining why one does not, and the missing double
+    buffer announces itself by flickering.
+
+  * Three assertions in check_screen_dims.py, which already owns the panel's
+    geometry and a viewport is that geometry temporarily redefined: every
+    viewport is reset, every setViewport keeps the datum argument, and the
+    no-sprite path still calls renderPanelGx. Each confirmed by breaking it.
+
+    Fifty-four check scripts.
+
+
 0.4.38 - 2026-10-05
 -------------------
 
