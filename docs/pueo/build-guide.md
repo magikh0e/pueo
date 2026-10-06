@@ -388,7 +388,7 @@ boot screen and menu come up and touch responds, you have a known-good
 starting point, and you will want one.
 
 ```bash
-esptool.py --chip esp32 -b 921600 write_flash 0x0 pueo-0.4.35-merged.bin
+esptool.py --chip esp32 -b 921600 write_flash 0x0 pueo-0.4.36-merged.bin
 ```
 
 `-b 921600` because esptool defaults to 115200, and the write is about 19

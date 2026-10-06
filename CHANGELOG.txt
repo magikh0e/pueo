@@ -11,6 +11,75 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.36 - 2026-10-05
+-------------------
+
+  Stealth Mode was not receive only. Web OTA transmitted through it, which
+  is the one thing the switch exists to prevent.
+
+  * WEB OTA IS GATED, AND IT NEVER WAS.
+
+    Stealth Mode refuses twenty tools and made no mention of firmware
+    updates. System -> Firmware Update -> Web OTA scanned for a network,
+    joined one and served HTTP over it, with the switch reading ON
+    throughout and the screen promising silence.
+
+    The scan was the quieter half and the worse one. selectWiFiNetwork()
+    called WiFi.scanNetworks() with no arguments at all, and the no-argument
+    form defaults passive to false, so a probe request carrying this
+    device's address went out on every channel before anything was joined.
+    Somebody checking that the radio was quiet would have seen a network
+    picker, not a transmitter.
+
+    Both halves are closed. performWebOTAUpdate() refuses at the top and
+    names itself, and the scan takes Stealth::on() as its third argument
+    like the other nine scans in the tree.
+
+    The gate is on the web half rather than on the Firmware Update screen.
+    The SD half beside it reads a file off the card and transmits nothing,
+    and making stealth cost an offline update would be a cost it never had
+    to have.
+
+    Twenty-one tools now, in the user guide's box, the README and the site.
+
+  * THE CHECK COULD NOT HAVE FOUND IT.
+
+    check_stealth.py looks for an active scan two ways, a literal false in
+    the third slot and the two-argument form that defaults to one. Both
+    patterns need a comma, so neither could match a call with no arguments.
+    One call site in the tree was written that way and it was the ungated
+    one.
+
+    There is a third pattern now. Reintroducing the bare call fails the
+    check, which is how it was confirmed rather than assumed.
+
+    func_body() had its own version of the same blind spot: it took the
+    first occurrence of a signature, so a file that declares a function
+    before defining it handed back the braces of whatever followed the
+    declaration. Web OTA is declared at wifi.cpp:9525 and defined at 10437,
+    so the gate read as absent once it was there. It now takes the
+    occurrence where a brace comes before a semicolon, which is what
+    separates a definition from a declaration, and works whether the list
+    names a whole signature or the start of one.
+
+  * THE SIGNATURE BREAKDOWN IS CHECKED, NOT JUST THE TOTAL.
+
+    New, tools/check_sig_tables.py, 23 assertions. check_sig_counts.py
+    asserts the pages say 274 and they did, while the surveillance page
+    listed eight tables under a sentence promising nine, with BLE advertised
+    name missing and the OUI row reading 118 against a table of 126. The
+    total was right because the two errors cancelled.
+
+    So this reads the breakdown: every table's row count wherever a page
+    prints one, that a page claiming nine tables lists nine, and the strong,
+    likely and weak split quoted for the OUI table.
+
+    Fifty-three check scripts now, all passing.
+
+  Nothing else reaches the device. The only source change is the gate and
+  the scan argument, both in wifi.cpp.
+
+
 0.4.35 - 2026-10-05
 -------------------
 

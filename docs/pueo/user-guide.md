@@ -399,10 +399,11 @@ ARP Scanner         AirTag Spoofer      BLE Jammer          BLE Spoofer
 Beacon Spammer      Captive Portal      De Bruijn / Brute   ESB Replay
 File Transfer       Hidden SSID Rev.    Karma Attack        MouseJack Inject
 Probe Req Flood     Proto Kill          Replay Attack       Saved Profile
-Sour Apple          SubGHz Jammer       WPS Scanner         WiFi Deauther
+Sour Apple          SubGHz Jammer       Web OTA             WPS Scanner
+WiFi Deauther
 ```
 
-Twenty tools, and with them the whole **RFID/NFC** menu. A PN532 reads a
+Twenty-one tools, and with them the whole **RFID/NFC** menu. A PN532 reads a
 card by energising a field and waiting for the card to answer, so even
 **Card Reader** transmits; stealth gates that menu as one rather than entry
 by entry, and nothing in it opens.
@@ -415,6 +416,10 @@ refuse where they stand rather than closing what they sit inside:
   says so before you confirm.
 - **BLE Scanner**, the **Info** button. Reading the Device Information
   Service means opening a connection.
+
+**Firmware Update** keeps its SD half. **Web OTA** joins a network and
+serves HTTP over it, so it refuses; updating from a file on the card
+transmits nothing and still works.
 
 Everything else stays available, which is most of the passive side: the
 scanners, the detectors, Surveillance, the drone detector and wardriving.

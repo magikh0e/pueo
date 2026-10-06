@@ -10446,7 +10446,11 @@ bool selectWiFiNetwork() {
   WiFi.disconnect();
   delay(100);
 
-  int numNetworks = WiFi.scanNetworks();
+  /* The three-argument form, like every other scan here. The no-argument
+   * one defaults passive to false, which is an active scan: a probe request
+   * carrying this device's address, on every channel, from the one call
+   * site in the tree that did not say so out loud. */
+  int numNetworks = WiFi.scanNetworks(false, false, Stealth::on());
   if (numNetworks <= 0) {
     tft.fillRect(0, 37, PUEO_SCREEN_W, PUEO_SCREEN_H, TFT_BLACK);
     tft.drawFastHLine(0, 19, PUEO_SCREEN_W, UI_LINE);
@@ -10665,6 +10669,13 @@ bool enterWiFiPassword() {
 }
 
 void performWebOTAUpdate() {
+  /* Web OTA joins a network and serves HTTP over it, and gets there through
+   * a scan. The gate is here rather than on the Firmware Update screen
+   * because the SD path beside it reads a file off the card and transmits
+   * nothing, and refusing that too would make stealth cost an offline
+   * update it never had to cost. */
+  if (Stealth::refuse("Web OTA")) { drawMenu(); return; }
+
   uiDrawn = false;
   static size_t totalUploaded = 0;
   bool inUpdate = false;

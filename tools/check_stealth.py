@@ -55,10 +55,27 @@ def read(rel):
 
 
 def func_body(src, signature):
-    i = src.find(signature)
-    if i < 0:
+    """The body of a definition, never a forward declaration.
+
+    A plain find() takes the first occurrence, and a file that declares a
+    function near the top before defining it further down hands back the
+    wrong braces: the next brace after the declaration opens whatever
+    follows it. The function then looks ungated whatever is really in it,
+    and the opposite mistake is available too.
+
+    The signature may be the whole thing or only its start, so the test is
+    which comes first after the match, a brace or a semicolon. That is what
+    separates a definition from a declaration however much was written down.
+    """
+    j = -1
+    for m in re.finditer(re.escape(signature), src):
+        brace = src.find("{", m.end())
+        semi = src.find(";", m.end())
+        if brace >= 0 and (semi < 0 or brace < semi):
+            j = brace
+            break
+    if j < 0:
         return ""
-    j = src.index("{", i)
     depth = 0
     for k in range(j, len(src)):
         if src[k] == "{":
@@ -116,6 +133,11 @@ TRANSMITTERS = [
     ("subghz.cpp",    "void subjammerSetup()",         "SubGHz Jammer"),
     ("subghz.cpp",    "void subBruteSetup()",          "De Bruijn / Brute"),
     ("subghz.cpp",    "void saveSetup()",              "Saved Profile"),
+    # Not a setup() and not an attack. Web OTA joins an access point and
+    # serves HTTP over it, so it belongs here; the gate sits on it rather
+    # than on the Firmware Update screen because the SD path beside it
+    # reads the card and transmits nothing.
+    ("wifi.cpp",      "void performWebOTAUpdate()",    "Web OTA"),
 ]
 
 # The transmit paths that are not features and have no setup() to gate, so
@@ -184,9 +206,15 @@ def main():
         # which defaults to one.
         active = re.findall(r"WiFi\.scanNetworks\([^,)]+,[^,)]+,\s*false", src)
         short = re.findall(r"WiFi\.scanNetworks\([^,)]*,[^,)]*\)", src)
-        ok("%s: no active WiFi scan" % fname, not active and not short,
-           "%d explicit, %d relying on the default"
-           % (len(active), len(short)))
+        # Both patterns above need a comma, so neither saw scanNetworks()
+        # with no arguments at all, which defaults passive to false exactly
+        # as the two-argument form does. One call site was written that way
+        # and went unexamined for as long as this check existed.
+        bare = re.findall(r"WiFi\.scanNetworks\(\s*\)", src)
+        ok("%s: no active WiFi scan" % fname,
+           not active and not short and not bare,
+           "%d explicit, %d two-argument, %d with no arguments"
+           % (len(active), len(short), len(bare)))
         ok("%s: no active BLE scan" % fname,
            "setActiveScan(true)" not in src,
            "an active scan answers every advertiser it hears")

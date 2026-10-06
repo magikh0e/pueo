@@ -199,7 +199,7 @@ the same in every copy. The screen says which list it loaded.
 
 ### Three settings the device did not have
 
-**Stealth Mode** makes it receive only across the whole device. Twenty
+**Stealth Mode** makes it receive only across the whole device. Twenty-one
 features that transmit refuse to start and say so; scans that were quietly
 active, and there were twelve, are made passive instead of blocked. Two
 transmit paths have no menu entry to gate, the Fast Pair probe and the BLE
