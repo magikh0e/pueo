@@ -3965,10 +3965,19 @@ static void scan() {
     return;
   }
 
+  /* Make it rather than complain about it. The directory only exists once
+   * a profile has been exported, so on a card that has never done that the
+   * screen was telling somebody to create a folder it could create itself,
+   * and the instruction below it to put files there named a path that was
+   * not on the card. sdEnsureDir builds the parents too. */
+  if (!SD.exists(SUBGHZ_SD_DIR)) {
+    sdEnsureDir(SUBGHZ_SD_DIR);
+  }
+
   File dir = SD.open(SUBGHZ_SD_DIR);
   if (!dir || !dir.isDirectory()) {
     if (dir) dir.close();
-    s_status = String("No ") + SUBGHZ_SD_DIR;
+    s_status = String("Cannot open ") + SUBGHZ_SD_DIR;
     s_statusWarn = true;
     return;
   }
