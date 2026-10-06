@@ -1421,26 +1421,29 @@ void redrawFeaturePanel(bool statusBarForceFull) {
     return;
   }
 
-  tft.fillRect(0, kGfxTop, tft.width(), tft.height() - kGfxTop,
-               FEATURE_BG);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextFont(1);
-  tft.setTextColor(UI_WARN, FEATURE_BG);
-  const int cy = kGfxTop + (tft.height() - kGfxTop) / 2;
-  tft.drawString("Display buffer failed", tft.width() / 2, cy - 20);
-
-  /* The number is the point. Without it this screen says only that
-   * something did not work, and serial is unavailable here. */
-  char detail[56];
-  snprintf(detail, sizeof(detail), "largest free block %u B",
-           (unsigned)gScanLargestBlock);
-  tft.setTextColor(UI_DIM_TEXT, FEATURE_BG);
-  tft.drawString(detail, tft.width() / 2, cy + 2);
-  snprintf(detail, sizeof(detail), "needs %u B for %d rows",
-           (unsigned)(tft.width() * kScanSpriteHMin), kScanSpriteHMin);
-  tft.drawString(detail, tft.width() / 2, cy + 18);
-  tft.setTextColor(UI_ICON, FEATURE_BG);
-  tft.drawString("tap the bottom to go back", tft.width() / 2, cy + 40);
+  /* No sprite, so draw the panel straight to the panel area instead of an
+   * error card. renderPanelGx is a template over its target and works on
+   * the TFT as well as on a sprite; the viewport is what makes that true
+   * without touching the renderer, because TFT_eSPI reports the viewport
+   * from width() and height() and offsets every coordinate into it, so the
+   * panel-relative Y values land below the status bar and fillScreen clips
+   * to the panel rather than wiping the bar.
+   *
+   * From cifertech/ESP32-DIV#263, which fixes the same thing upstream.
+   *
+   * This drops the card that named the largest free block and the size a
+   * sprite needed. Those were the two numbers worth having and serial is
+   * not visible from this screen, so it is a real loss, taken deliberately:
+   * a panel that draws beats a number explaining why one does not. The
+   * missing double buffer is not silent either, it flickers.
+   *
+   * The retry above still runs every 800 ms, so this is the degraded path
+   * rather than a dead end, and the screen upgrades itself the moment a
+   * sprite fits. */
+  const int panelH = tft.height() - kGfxTop;
+  tft.setViewport(0, kGfxTop, tft.width(), panelH);
+  renderPanelGx(tft);
+  tft.resetViewport();
 
   tft.setTextFont(2);
   tft.setTextDatum(TL_DATUM);

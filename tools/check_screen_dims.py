@@ -256,6 +256,34 @@ def main():
                     stray.append(f"{name}:{i} x={tok}")
     ok("no icon row is anchored to a fixed x", not stray, "; ".join(stray[:4]))
 
+    # ── the satellite panel's no-sprite fallback ────────────────────────
+    #
+    # When no sprite allocates, the panel renders straight to the TFT inside
+    # a viewport. That is from cifertech/ESP32-DIV#263. A viewport is the
+    # panel geometry temporarily redefined, so it belongs in this file.
+    gps = (SKETCH / "gps.cpp").read_text(
+        encoding="utf-8", errors="replace")
+
+    sets = re.findall(r"\btft\.setViewport\s*\(([^;]*)\)\s*;", gps)
+    resets = re.findall(r"\btft\.resetViewport\s*\(\s*\)\s*;", gps)
+    ok("every viewport is reset", len(sets) == len(resets),
+       "%d setViewport, %d resetViewport: an unreset viewport puts the "
+       "status bar inside the panel" % (len(sets), len(resets)))
+
+    # The fifth argument defaults to true and that default is the whole
+    # mechanism: it is what makes width() and height() report the viewport,
+    # so renderPanelGx's panel-relative coordinates mean what it thinks.
+    for a in sets:
+        args = [x.strip() for x in a.split(",")]
+        ok("  it takes the viewport datum (%d args)" % len(args),
+           len(args) == 4 or (len(args) == 5 and args[4] == "true"),
+           "a fifth argument of false makes width() the screen again")
+
+    ok("  and the panel still draws without a sprite",
+       "renderPanelGx(tft)" in gps,
+       "the no-sprite path no longer renders the panel, so low memory "
+       "leaves the screen unusable")
+
     print()
     if FAILED:
         print(f"FAILED: {len(FAILED)} of {CHECKS}")
