@@ -718,11 +718,15 @@ MT3608 boost     36 x 17  (?)    6.0          MEASURED 2026-09-26, on the
                                               and it turns out not to matter
 TP4056 charger   27 x 17         ~4  (est)    micro-USB jack is the tallest
                                               thing on it, ~2.7 over ~1.0
-S7V8F3 buck-boost 11.4 x 16.5    3.0          PUBLISHED, all three: Pololu
-                                              give 0.45 x 0.65 x 0.1 inch.
-                                              The only height in this table
-                                              that comes from the maker, and
-                                              the shortest part in the case
+S7V8F3 buck-boost 11.4 x 16.5    3.0          Pololu give 0.45 x 0.65 x 0.1
+                                              inch. The first two convert to
+                                              11.43 and 16.51; the third is
+                                              2.54, and 3.0 is that ROUNDED UP
+                                              on purpose. Still the shortest
+                                              part in the case, and the only
+                                              one whose figure comes from the
+                                              maker rather than from eyeing
+                                              the tallest component
 MP2307 buck      17.9 x 12       ~6  (est)    inductor and trimmer stand
                                               proud of a ~1.0 board. Rejected:
                                               a buck cannot start at 2.7 V
@@ -740,11 +744,16 @@ spacing, and confirmed on the part in hand, 2026-10-06:
 
 ```
 VOUT   GND   VIN   SHDN
+                   ‾‾‾‾
 ```
+
+`SHDN` is printed with an overbar, so it is **active low**: the board runs
+when the pin is high or floating and shuts down when it is pulled to ground.
 
 The netlist connects three of them and that is correct electrically, because
 Pololu say `SHDN` may be tied to `VIN` or left disconnected to leave the board
-permanently enabled. It still needs a pad. A three-pad footprint for a
+permanently enabled. That works because of the polarity above, not in spite of
+it: an unconnected pad is a running converter. It still needs a pad. A three-pad footprint for a
 four-pin part is the kind of thing that is free to fix now and a scalpel
 later.
 
@@ -760,6 +769,14 @@ Worth knowing for a second spin: `SHDN` is how the RF rail could be switched
 off in software, which would take the radios' idle draw out of the budget
 entirely. There is no spare GPIO for it today, so the pad is the whole of the
 provision.
+
+Whichever pin it eventually gets has to be chosen on its reset behaviour
+rather than its number. Active low means the rail is off while the pin is
+held down, so a strapping pin or anything else that sits low out of reset
+keeps the radios dark until firmware gets far enough to raise it, and a brief
+dip during a reset drops the rail mid-operation. A pin that comes up as a
+high-impedance input is the safe shape: the part's own pull-up then holds it
+enabled until something deliberately pulls it down.
 
 **The five marked `(est)` are reasoned from the tallest visible component,
 not measured.** Listings for these parts publish footprint and almost never
