@@ -4970,6 +4970,46 @@ static constexpr uint16_t BUTTON_POLL_STRIDE = 8;
 
 int backgroundNoise[CHANNELS] = {0};
 
+/* What sits at an RF_CH, as a short tag for the scan line.
+ *
+ * RF_CH n is 2400 + n MHz. Zigbee channel z is centred at 2405 + 5(z-11),
+ * which is RF_CH 5 through 80 in steps of five; WiFi channel w is centred at
+ * 2412 + 5(w-1), which is RF_CH 12 through 72 in the same steps, plus
+ * channel 14 alone at RF_CH 84.
+ *
+ * Within 2 MHz of a centre counts. A Zigbee carrier is about 2 MHz wide and
+ * the nRF24's receiver is 1 MHz, so energy one or two channels off a centre
+ * is the same signal seen from its shoulder.
+ *
+ * This names what occupies the frequency, never what is transmitting. The
+ * RPD reports energy and nothing else: it cannot tell Zigbee from WiFi from
+ * a microwave oven, and at 2.4 GHz all three share the room. Both names are
+ * printed when both apply, because printing one would be a guess dressed as
+ * a reading.
+ */
+static String bandTag(int rfch) {
+  String out = "";
+  const int mhz = 2400 + rfch;
+
+  for (int z = 11; z <= 26; z++) {
+    const int centre = 2405 + 5 * (z - 11);
+    if (mhz >= centre - 2 && mhz <= centre + 2) {
+      out += "Zb" + String(z);
+      break;
+    }
+  }
+  for (int w = 1; w <= 14; w++) {
+    const int centre = (w == 14) ? 2484 : (2412 + 5 * (w - 1));
+    if (mhz >= centre - 2 && mhz <= centre + 2) {
+      if (out.length()) out += "/";
+      out += "W" + String(w);
+      break;
+    }
+  }
+  return out;
+}
+
+
 volatile bool scanning = true;
 
 static constexpr int kScannerGraphTop = 190;
@@ -5223,7 +5263,10 @@ void scan() {
     }
   }
   if (peakHits > 0) {
-    Print("[+] Scan done  " + String(active) + " hit(s)  peak Ch" + String(peakCh), UI_WARN, false);
+    const String tag = bandTag(peakCh);
+    Print("[+] Scan done  " + String(active) + " hit(s)  peak Ch"
+          + String(peakCh) + " " + String(2400 + peakCh)
+          + (tag.length() ? " " + tag : ""), UI_WARN, false);
   } else {
     Print("[*] Scan done  no carriers", UI_DIM_TEXT, false);
   }
