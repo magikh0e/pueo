@@ -111,7 +111,7 @@ the same sense a probe request is.
 - Every string field is copied into a fixed buffer, trimmed and terminated.
 
 `tools/check_sub_parse.py` transcribes `parse()` and `write()` into Python
-and runs 61,448 checks: the real-world cases above, RAW three ways, each
+and runs 61,453 checks: the real-world cases above, RAW three ways, each
 required field dropped in turn, the range edges, every rolling-code name at
 both a plausible and an implausible bit count, 60,000 fuzz inputs, and every
 single-byte mutation of a valid file against five replacement characters.

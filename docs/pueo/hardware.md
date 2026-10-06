@@ -95,12 +95,35 @@ That **excludes JST PH 2.0**, which would have measured 96 px, and that is the
 exclusion that matters in practice because PH is what most hobby cells ship
 with. It does not separate 1.25 (+9%) from 1.50 (-9%), and a 9% scale gradient
 across 500 px of a macro shot is ordinary perspective. Settle it by fit: if a
-2-pin MX1.25 housing seats, it is 1.25.
+2-pin **GH** housing seats, it is 1.25.
 
-**Buy MX1.25 or Molex PicoBlade, never JST GH.** Both are 1.25 mm pitch and
-they do not mate: GH latches on the side, PicoBlade on top. GH is the
-Pixhawk standard, so listings aimed at drone builders are full of it, and
-several of them say "PicoBlade" and "for Pixhawk" in the same title.
+Not a PicoBlade housing, which is the part this used to name. PicoBlade does
+not seat on these headers at any pitch, so a refusal would read as "not
+1.25" when it only means "not PicoBlade".
+
+**Buy JST GH, not MX1.25 or Molex PicoBlade.** Both are 1.25 mm pitch and
+they do not mate: GH latches on the side, PicoBlade on top. Listings make
+this worse rather than better, because plenty of them say "PicoBlade" and
+"for Pixhawk" in the same title, and those are two different parts.
+
+Settled by fit on 2026-10-06, which is the only way it can be settled: a
+PicoBlade / MX1.25 housing offered to the header does not seat, and the
+pitch is right. This paragraph used to say the opposite, having gone one
+step past its own evidence. The measurement established the **pitch**, and
+pitch does not determine series; the series was named without a housing ever
+being tried, and an order was placed against it.
+
+**[verify] GH by elimination, not by identification.** What is known is
+1.25 mm pitch and not PicoBlade, which leaves GH as the common answer and
+Hirose DF13 as the legacy one. Confirm on yours by where the latch sits: GH
+locks against the side of the shroud.
+
+The useful consequence is that both cables this build needs are **4-way**,
+and 4 is one of the sizes the hobby market actually stocks GH in, along with
+6, 8 and 10, because those are the Pixhawk sizes. Pre-crimped is the thing
+to buy. `GHR-04V-S` is the housing if you are crimping your own, with
+`SSHL-002T-P0.2` contacts, but a hand crimp at 0.2 mm² that grips insulation
+rather than conductor reads fine on a meter and fails under load.
 
 **BAT1's polarity is on the silkscreen, and only half of it. The half that
 is there is right.** `BAT1` sits to the left of the connector and `BAT-` to

@@ -94,11 +94,22 @@ connector the CYD already has, three of them on `P3` and one on `P1`. The other
 six are soldered to pads, and a pre-crimped lead with one end cut, stripped and
 tinned serves those perfectly.
 
-| | ways | carries |
-|---|---|---|
-| **J1** | 9 | the six soldered signals, plus three grounds. No power pin |
-| **J2** | 4 | straight to `P3`, in `P3`'s own order: GND, IO35, IO22, IO21 |
-| **J3** | 4 | straight to `P1`: 5V, TX, RX, GND. The 5 V in, and the GPS out |
+| | ways | series | carries |
+|---|---|---|---|
+| **J1** | 9 | PicoBlade | the six soldered signals, plus three grounds. No power pin |
+| **J2** | 4 | JST GH | straight to `P3`, in `P3`'s own order: GND, IO35, IO22, IO21 |
+| **J3** | 4 | JST GH | straight to `P1`: 5V, TX, RX, GND. The 5 V in, and the GPS out |
+
+**Two series, on purpose. Do not unify them.** J2 and J3 have to mate with
+the CYD's own headers, which are 1.25 mm **GH**, settled by fit on
+2026-10-06 after a PicoBlade housing was offered to one and did not seat.
+Both are 4-way, which is a size GH is stocked in.
+
+J1 is the opposite case: only one of its ends is a connector, because the
+other is nine wires soldered to the CYD's pads. Nothing about it has to
+mate with a vendor part, and at 9 ways it must not be GH, for exactly the
+reason the 14-way below was abandoned. PicoBlade runs 2 to 15 and is
+stocked at 9.
 
 **The 14-way it replaced was the one part that needed a crimp tool.** That
 draft said 14-way 1.25 mm JST-GH, because GH is easier to hand-assemble than

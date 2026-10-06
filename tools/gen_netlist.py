@@ -162,11 +162,17 @@ FIRMWARE_CHECK = {
 BOM = [
     # J1 to J3 are the three cables to the lid. J4 to J7 are the module
     # headers on this board.
-    ("J1",  1, "Connector 9-way 1.25mm MX1.25",
-     "lid harness: the six signals that have to be soldered, plus grounds"),
-    ("J2",  1, "Connector 4-way 1.25mm MX1.25",
+    # PicoBlade, not GH, and deliberately not matching J2/J3. Only one end
+    # of this cable is a connector; the other is nine solder joints at the
+    # CYD, so nothing here has to mate with a vendor part. GH is stocked at
+    # 4, 6, 8 and 10 and not at 9, which is the wall the 14-way draft hit.
+    ("J1",  1, "Connector 9-way 1.25mm MX1.25 / PicoBlade",
+     "lid harness: the six signals that have to be soldered, plus grounds. "
+     "PicoBlade because 9-way GH is not a stocked size and this end mates "
+     "with nothing the vendor chose"),
+    ("J2",  1, "Connector 4-way 1.25mm JST GH",
      "straight to the CYD's P3, in P3's own order: GND, IO35, IO22, IO21"),
-    ("J3",  1, "Connector 4-way 1.25mm MX1.25",
+    ("J3",  1, "Connector 4-way 1.25mm JST GH",
      "straight to the CYD's P1: 5V, TX, RX, GND. Pin 3 is unused, because "
      "GPS_UART_TX is -1 and nothing is sent to the GPS"),
     ("J4",  1, "Header 2x4 2.54mm", "HW-863 CC1101 module [verify pinout]"),

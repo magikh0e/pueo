@@ -30,6 +30,13 @@ There is no PCB. [pcb-design.md](pcb-design.md) is design input for one, and
 it deliberately comes *after* this: a board freezes a pin map that bring-up
 can still move.
 
+**Test before you solder.** Six of the ten signals have no connector at
+either end, and those joints are hard to undo. The GPS needs no soldering at
+all, and the CC1101 needs none if you tap the card slot, so both can be
+proved before anything is permanent.
+[bench-build.md](bench-build.md) is that path, and it is the one to walk
+first.
+
 ## Read this part before you buy anything
 
 **The radios do not share the CYD's 3.3 V regulator.** The NRF24L01+PA+LNA
@@ -347,12 +354,18 @@ against P1 in one frame, which rules out JST PH 2.0, the connector most
 hobby cells ship with, but does not separate 1.25 from 1.50. See
 [hardware.md](hardware.md). Check by fit before you rely on it.
 
-**Ask for MX1.25 or Molex PicoBlade. Do not buy JST GH.** Both are 1.25 mm
+**Ask for JST GH. Do not buy MX1.25 or Molex PicoBlade.** Both are 1.25 mm
 pitch and they will not mate: GH latches on the side, PicoBlade on top. GH is
 the [Pixhawk connector standard](https://github.com/pixhawk/Pixhawk-Standards),
 so it dominates listings aimed at drone builders, and plenty of those say
-"PicoBlade" and "for Pixhawk" in the same title. Searching `MX1.25 2P` and
-leaving "Pixhawk" out of the query drops the GH parts from the results.
+"PicoBlade" and "for Pixhawk" in the same title, which is how the wrong one
+gets ordered in either direction.
+
+Settled by fit on 2026-10-06: a PicoBlade housing offered to a header does
+not seat, with the pitch correct. This paragraph said the reverse until
+then, because the pitch had been measured and the series had not been
+tested, and those are two different facts. Search `JST GH 1.25 4P` and buy
+pre-crimped; 4-way is a stocked size.
 
 Do not crimp 1.25 mm yourself. It needs the proper tool, and a bad crimp is
 an intermittent you will chase for hours. Either buy assembled pigtails, or
