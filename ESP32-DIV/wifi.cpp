@@ -201,13 +201,21 @@ static uint32_t pcapDropped = 0;
 static uint32_t pcapLastFlushMs = 0;
 
 static constexpr uint8_t PCAP_POOL_SIZE = ESP32DIV_PCAP_POOL_SIZE;
+/* Slots above the general pool are reachable only by a frame the EAPOL
+ * tracker has just recognised. The pool is drained from ptmLoop at a dozen
+ * records a pass, behind delay(10) and the screen, so during the burst an
+ * association causes it empties whatever its depth: sixteen slots still
+ * lost all four frames of a handshake. Depth is a bet and a reserve is not.
+ * Eight is two complete exchanges. */
+static constexpr uint8_t PCAP_KEY_RESERVE = 8;
+static constexpr uint8_t PCAP_SLOTS_TOTAL = PCAP_POOL_SIZE + PCAP_KEY_RESERVE;
 struct PcapSlot {
   PcapRecordHeader hdr;
   uint16_t caplen;
   uint8_t  data[SNAP_LEN + RADIOTAP_LEN];
 };
 #if BOARD_HAS_ESP32S3
-static PcapSlot pcapPoolStorage[PCAP_POOL_SIZE];
+static PcapSlot pcapPoolStorage[PCAP_SLOTS_TOTAL];
 static PcapSlot* pcapPool = pcapPoolStorage;
 #else
 // Classic ESP32: keep ~1.6KB+ out of .bss; allocate only when PCAP logging starts.
@@ -215,6 +223,9 @@ static PcapSlot* pcapPool = nullptr;
 #endif
 static QueueHandle_t pcapFreeQ = nullptr;
 static QueueHandle_t pcapWriteQ = nullptr;
+/* The reserve's own free list. Returning a reserve slot here rather than to
+ * pcapFreeQ is what stops ordinary traffic draining it. */
+static QueueHandle_t pcapKeyFreeQ = nullptr;
 
 static bool pcapMountSD() {
   if (pcapMounted) {
@@ -246,7 +257,13 @@ static void pcapDisableAndCloseFile() {
   if (pcapWriteQ && pcapFreeQ) {
     uint8_t slotIdx;
     while (xQueueReceive(pcapWriteQ, &slotIdx, 0) == pdTRUE) {
-      xQueueSend(pcapFreeQ, &slotIdx, 0);
+      /* A reserve slot goes home to the reserve, or ordinary traffic would
+       * inherit it the moment the file closes and reopens. */
+      if (slotIdx >= PCAP_POOL_SIZE && pcapKeyFreeQ) {
+        xQueueSend(pcapKeyFreeQ, &slotIdx, 0);
+      } else {
+        xQueueSend(pcapFreeQ, &slotIdx, 0);
+      }
     }
   }
 
@@ -260,6 +277,7 @@ static void pcapDisableAndCloseFile() {
 static void pcapStop() {
   pcapDisableAndCloseFile();
 
+  if (pcapKeyFreeQ) { vQueueDelete(pcapKeyFreeQ); pcapKeyFreeQ = nullptr; }
   if (pcapWriteQ) { vQueueDelete(pcapWriteQ); pcapWriteQ = nullptr; }
   if (pcapFreeQ)  { vQueueDelete(pcapFreeQ);  pcapFreeQ  = nullptr; }
 
@@ -297,15 +315,16 @@ static void pcapStart() {
   }
 
   pcapFreeQ = xQueueCreate(PCAP_POOL_SIZE, sizeof(uint8_t));
-  pcapWriteQ = xQueueCreate(PCAP_POOL_SIZE, sizeof(uint8_t));
-  if (!pcapFreeQ || !pcapWriteQ) {
+  pcapKeyFreeQ = xQueueCreate(PCAP_KEY_RESERVE, sizeof(uint8_t));
+  pcapWriteQ = xQueueCreate(PCAP_SLOTS_TOTAL, sizeof(uint8_t));
+  if (!pcapFreeQ || !pcapKeyFreeQ || !pcapWriteQ) {
     pcapStop();
     return;
   }
 
 #if !BOARD_HAS_ESP32S3
   if (!pcapPool) {
-    pcapPool = (PcapSlot*)malloc(sizeof(PcapSlot) * PCAP_POOL_SIZE);
+    pcapPool = (PcapSlot*)malloc(sizeof(PcapSlot) * PCAP_SLOTS_TOTAL);
     if (!pcapPool) {
       pcapStop();
       return;
@@ -315,6 +334,9 @@ static void pcapStart() {
 
   for (uint8_t i = 0; i < PCAP_POOL_SIZE; i++) {
     xQueueSend(pcapFreeQ, &i, 0);
+  }
+  for (uint8_t i = PCAP_POOL_SIZE; i < PCAP_SLOTS_TOTAL; i++) {
+    xQueueSend(pcapKeyFreeQ, &i, 0);
   }
 
   pcapEnabled = true;
@@ -440,6 +462,10 @@ uint32_t deauths = 0;
 portMUX_TYPE s_eapolMux = portMUX_INITIALIZER_UNLOCKED;
 uint32_t s_eapolFrames = 0;
 int      s_eapolUsable = 0;
+/* Key frames the tracker recognised and the writer did not save. The
+ * indicator is fed before the queue, so without this the screen reports a
+ * handshake that is not in the file. */
+uint32_t s_eapolLost = 0;
 unsigned int ch = 1;
 int rssiSum;
 
@@ -594,21 +620,41 @@ void do_sampling_FFT() {
 
   tft.fillRect(162, 20, 76, 16, kPtmToolbarBg);
   if (hsTotal > 0) {
+    const uint32_t lost = s_eapolLost;
     tft.setCursor(165, 24);
-    tft.setTextColor(hsUsable > 0 ? TFT_GREEN : ORANGE);
+    /* Red beats green when frames were dropped. The count is what the radio
+     * heard; the file is what somebody opens later, and a green HS over a
+     * pcap with no handshake in it is the one reading that must not be
+     * available. */
+    tft.setTextColor(lost ? UI_WARN : (hsUsable > 0 ? TFT_GREEN : ORANGE));
     tft.print("HS ");
     tft.print(hsUsable);
     tft.print("/");
     tft.print(hsTotal);
+    if (lost) {
+      tft.print(" -");
+      tft.print(lost);
+    }
     tft.setTextColor(TFT_WHITE);
   }
 
-  /* Say so once, when a network first has the pair worth having. The frames
-   * are already in the pcap; this is the operator's cue that they are. */
+  /* Say so once, when a network first has the pair worth having, and say
+   * whether the frames reached the card. This used to assert that they had,
+   * which was false whenever the pool ran dry: the tracker runs before the
+   * queue, so the cue arrived either way. */
   if (hsUsable > s_eapolUsable) {
     s_eapolUsable = hsUsable;
-    Serial.printf("[EAPOL] %d network(s) with M2+M3, %lu key frames seen\n",
-                  hsUsable, (unsigned long)s_eapolFrames);
+    const uint32_t lost = s_eapolLost;
+    if (lost) {
+      Serial.printf("[EAPOL] %d network(s) with M2+M3, %lu key frames seen, "
+                    "%lu NOT WRITTEN, the pcap is incomplete\n",
+                    hsUsable, (unsigned long)s_eapolFrames,
+                    (unsigned long)lost);
+    } else {
+      Serial.printf("[EAPOL] %d network(s) with M2+M3, %lu key frames seen, "
+                    "all written\n",
+                    hsUsable, (unsigned long)s_eapolFrames);
+    }
   }
 
   delay(10);
@@ -640,34 +686,53 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
    * whether the frame happens to fit the capture. EAPOL frames are a couple
    * of hundred bytes, so in practice both see them, but coupling the two
    * would be a trap for whoever changes SNAP_LEN. */
+  Eapol::Msg em = Eapol::Msg::None;
   {
     const uint32_t now = millis();
     portENTER_CRITICAL_ISR(&s_eapolMux);
-    const Eapol::Msg em =
-        Eapol::observe(pkt->payload, (uint16_t)ctrl.sig_len, now);
+    em = Eapol::observe(pkt->payload, (uint16_t)ctrl.sig_len, now);
     portEXIT_CRITICAL_ISR(&s_eapolMux);
     if (em != Eapol::Msg::None) {
       s_eapolFrames++;
     }
   }
 
-  if (ctrl.sig_len > SNAP_LEN) return;
+  if (ctrl.sig_len > SNAP_LEN) {
+    if (em != Eapol::Msg::None) s_eapolLost++;
+    return;
+  }
 
   const uint16_t packetLength = (uint16_t)ctrl.sig_len;
   tmpPacketCounter++;
   rssiSum += ctrl.rssi;
 
-  if (!pcapEnabled || !pcapFile || !pcapFreeQ || !pcapWriteQ || !pcapPool) return;
-
-  uint8_t slotIdx;
-  if (xQueueReceive(pcapFreeQ, &slotIdx, 0) != pdTRUE) {
-    pcapDropped++;
+  if (!pcapEnabled || !pcapFile || !pcapFreeQ || !pcapWriteQ || !pcapPool) {
+    /* Not a drop: nothing is being written, so nothing was lost. The
+     * tracker still counted the frame and the screen still says so, which
+     * is correct, because the claim the indicator makes is about what was
+     * heard rather than about a file that does not exist. */
     return;
   }
 
-  if (slotIdx >= PCAP_POOL_SIZE) {
+  uint8_t slotIdx;
+  if (xQueueReceive(pcapFreeQ, &slotIdx, 0) != pdTRUE) {
+    /* The pool is empty. For ordinary traffic that is a dropped frame and
+     * nothing more. For a key frame it is the whole point of the feature
+     * going missing, so it may take a slot nothing else can reach. */
+    bool got = false;
+    if (em != Eapol::Msg::None && pcapKeyFreeQ) {
+      got = (xQueueReceive(pcapKeyFreeQ, &slotIdx, 0) == pdTRUE);
+    }
+    if (!got) {
+      pcapDropped++;
+      if (em != Eapol::Msg::None) s_eapolLost++;
+      return;
+    }
+  }
 
+  if (slotIdx >= PCAP_SLOTS_TOTAL) {
     pcapDropped++;
+    if (em != Eapol::Msg::None) s_eapolLost++;
     return;
   }
 
@@ -937,6 +1002,7 @@ void ptmLoop() {
     portEXIT_CRITICAL(&s_eapolMux);
     s_eapolFrames = 0;
     s_eapolUsable = 0;
+    s_eapolLost = 0;
     ptmStartRadioAndPcapOnce();
     s_ptmHwReady = true;
     constexpr int kPtmWaitBodyTop = 40;
@@ -950,8 +1016,9 @@ void ptmLoop() {
 
     esp_wifi_set_promiscuous(false);
     if (pcapPacketsWritten || pcapDropped) {
-      Serial.printf("[PCAP] PacketMonitor stopped. written=%lu dropped=%lu\n",
-                    (unsigned long)pcapPacketsWritten, (unsigned long)pcapDropped);
+      Serial.printf("[PCAP] PacketMonitor stopped. written=%lu dropped=%lu keyframes_lost=%lu\n",
+                    (unsigned long)pcapPacketsWritten, (unsigned long)pcapDropped,
+                    (unsigned long)s_eapolLost);
     }
     pcapStop();
     feature_exit_requested = true;
@@ -962,8 +1029,9 @@ void ptmLoop() {
   if (feature_exit_requested) {
     esp_wifi_set_promiscuous(false);
     if (pcapPacketsWritten || pcapDropped) {
-      Serial.printf("[PCAP] PacketMonitor stopped. written=%lu dropped=%lu\n",
-                    (unsigned long)pcapPacketsWritten, (unsigned long)pcapDropped);
+      Serial.printf("[PCAP] PacketMonitor stopped. written=%lu dropped=%lu keyframes_lost=%lu\n",
+                    (unsigned long)pcapPacketsWritten, (unsigned long)pcapDropped,
+                    (unsigned long)s_eapolLost);
     }
     pcapStop();
     return;
@@ -980,8 +1048,8 @@ void ptmLoop() {
     uint8_t slotIdx;
 
     uint16_t drained = 0;
-    while (drained < 12 && xQueueReceive(pcapWriteQ, &slotIdx, 0) == pdTRUE) {
-      if (slotIdx < PCAP_POOL_SIZE) {
+    while (drained < 24 && xQueueReceive(pcapWriteQ, &slotIdx, 0) == pdTRUE) {
+      if (slotIdx < PCAP_SLOTS_TOTAL) {
         PcapSlot& s = pcapPool[slotIdx];
         const size_t wroteHdr = pcapFile.write((const uint8_t*)&s.hdr, sizeof(s.hdr));
         const size_t wrotePkt = pcapFile.write(s.data, s.caplen);
@@ -992,7 +1060,11 @@ void ptmLoop() {
           pcapDisableAndCloseFile();
         }
       }
-      xQueueSend(pcapFreeQ, &slotIdx, 0);
+      if (slotIdx >= PCAP_POOL_SIZE) {
+        xQueueSend(pcapKeyFreeQ, &slotIdx, 0);
+      } else {
+        xQueueSend(pcapFreeQ, &slotIdx, 0);
+      }
       drained++;
     }
 

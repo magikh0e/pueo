@@ -4,13 +4,33 @@
       "file": "ptm-mixed-no-eapol.pcap",
       "source": "Captured with Pueo 0.4.36, WiFi > Packet Monitor, on a home network belonging to magikh0e. Addresses and SSIDs replaced in place by tools/anonymise_capture.py; every length, frame control field and header layout is the captured one.",
       "licence": "GPL-3.0-or-later, as part of this repository",
-      "note": "Real traffic with no handshake in it, which is the case that cannot be synthesised honestly: 658 frames off an actual radio, malformed ones included, and the parser has to read all of them without a single out-of-bounds access and report no EAPOL at all. A false positive here would be a row on the screen claiming a handshake nobody transmitted. Packet Monitor was in listen-all mode and hopping, so the four-way exchanges implied by the association frames in it were on another channel when they happened.",
+      "note": "Real traffic with no handshake in it, which is the case that cannot be synthesised honestly: 658 frames off an actual radio, malformed ones included, and the parser has to read all of them without a single out-of-bounds access and report no EAPOL at all. A false positive here would be a row on the screen claiming a handshake nobody transmitted.",
       "expect": {
         "frames": 658,
         "eapol": 0,
         "protected": 109,
         "headers": {},
         "msgs": {}
+      }
+    },
+    {
+      "file": "ptm-eapol-handshake-qos.pcap",
+      "source": "Captured with Pueo 0.4.37, WiFi > Packet Monitor parked on channel 4, on a home network belonging to magikh0e, while a phone reconnected. Anonymised by tools/anonymise_capture.py and trimmed by tools/trim_capture.py to the key frames plus 20 records either side.",
+      "licence": "GPL-3.0-or-later, as part of this repository",
+      "note": "A complete four-way exchange off this hardware, and the first one it was capable of recording: until 0.4.37 the capture pool had no reserve and every handshake burst was crowded out by the traffic around it, so no capture from this device could hold one. Six key frames because the access point retried M1 and M3, which is ordinary and worth keeping: a count of EAPOL frames reaching four proves nothing, and these six are two M1, one M2, two M3 and one M4. Every frame is QoS data with the SNAP header at offset 26 rather than 24, which is the layout a fixed-offset parser reads two bytes late and the one no fixture covered before. The key_info values are the real ones off a real association.",
+      "expect": {
+        "frames": 46,
+        "eapol": 6,
+        "protected": 1,
+        "headers": {
+          "26": 6
+        },
+        "msgs": {
+          "M1": 2,
+          "M2": 1,
+          "M3": 2,
+          "M4": 1
+        }
       }
     }
   ]

@@ -252,13 +252,24 @@ say so in a way that is easy to fix and hard to guess.
    first two. Nothing calls it yet.
 3. **Done.** `classify`, `addresses` and the per-AP tracker, in the same
    file. `tools/check_eapol_locate.py` became `tools/check_eapol.py` and
-   covers all of it: 124,322 checks.
+   covers all of it: 124,333 checks.
 4. **Done.** Packet Monitor offers every frame to the tracker and shows
    `HS <usable>/<total>` beside the packet counter, amber until a network
    has M2 and M3 and green once one does, with a line on the serial console
-   when that first happens. The frames were already going to the pcap; this
-   is the part that says so. 1,224 bytes of flash and 392 of RAM, the latter
+   when that first happens. 1,224 bytes of flash and 392 of RAM, the latter
    being sixteen rows of twenty-four bytes.
+
+   This said the frames were already going to the pcap and that was false.
+   The tracker runs before the frame-size check and before the capture
+   queue, which is the right order and means the indicator answers a
+   different question from the file. With a three-slot pool the answers
+   disagreed: measured on hardware, five key frames counted and none
+   written. The pool is sixteen now, and a key frame the writer could not
+   take is counted and shown as `HS u/t -n` in red, on the screen and on
+   both serial lines. `tools/check_pcap_pool.py` holds the pool depth and
+   insists every early return between the tracker and the write accounts
+   for a key frame, because a new return added above the write is how this
+   comes back.
 5. **Done.** The same parser, over captures rather than frames this
    repository wrote. Synthetic frames can only ask about a layout somebody
    thought of, and one missing from the parser is missing from the test for
@@ -269,11 +280,18 @@ say so in a way that is easy to fix and hard to guess.
    `tools/fixtures/`. `manifest.json` declares what each file should yield
    and every entry has to name a source and a licence.
 
-   The first fixture has no handshake in it, which is the case that cannot
-   be synthesised honestly: 658 frames off a real radio, malformed ones
+   One fixture has no handshake in it, which is the case that cannot be
+   synthesised honestly: 658 frames off a real radio, malformed ones
    included, read without a single out-of-bounds access, reporting no EAPOL
    and refusing 109 encrypted data frames. A false positive there would be
    a row claiming a handshake nobody sent.
+
+   The other is a complete four-way exchange, six frames because the access
+   point retried M1 and M3, every one of them QoS data with the payload at
+   offset 26 rather than 24. That is the layout a fixed-offset parser reads
+   two bytes late, and it took the capture-pool reserve in 0.4.37 to record
+   one at all: before that the burst was crowded out by the traffic around
+   it every time.
 
    Addresses and SSIDs are replaced in place by
    `tools/anonymise_capture.py`, which keeps every length, frame control

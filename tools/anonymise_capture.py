@@ -199,6 +199,30 @@ def sweep(blob, originals):
     return sorted(m for m in originals if m in blob)
 
 
+def records(raw, end):
+    """(16-byte record header, record bytes) for each record."""
+    out, i = [], 24
+    while i + 16 <= len(raw):
+        head = raw[i:i + 16]
+        _ts, _us, caplen, _orig = struct.unpack(end + "IIII", head)
+        i += 16
+        out.append((head, raw[i:i + caplen]))
+        i += caplen
+    return out
+
+
+def body_of(rec, link):
+    """The 802.11 frame inside a record, and where it starts."""
+    if link != 127:
+        return bytes(rec), 0
+    if len(rec) < 4:
+        return None, 0
+    rtlen = struct.unpack("<H", rec[2:4])[0]
+    if rtlen < 8 or rtlen > len(rec):
+        return None, 0
+    return bytes(rec[rtlen:]), rtlen
+
+
 def main():
     if len(sys.argv) != 3:
         print(__doc__)
@@ -214,51 +238,60 @@ def main():
         print("link type %d is not 802.11" % link)
         return 1
 
-    addrs = Addresses()
-    out = bytearray(raw[:24])
-    source_bodies = []
-    i, frames, ssids, dropped = 24, 0, 0, 0
-    while i + 16 <= len(raw):
-        head = raw[i:i + 16]
-        _ts, _us, caplen, _orig = struct.unpack(end + "IIII", head)
-        i += 16
-        rec = bytearray(raw[i:i + caplen])
-        i += caplen
-        frames += 1
+    recs = records(raw, end)
+    bodies = [body_of(rec, link)[0] for _h, rec in recs]
+    bodies = [b for b in bodies if b is not None]
 
-        rtlen = 0
-        if link == 127:
-            rtlen = struct.unpack("<H", rec[2:4])[0] if len(rec) >= 4 else 0
-            if rtlen < 8 or rtlen > len(rec):
-                # A record whose radiotap header does not parse used to be
-                # written through untouched, which is the one case where
-                # "leave it alone" means "publish it". Keep the record, so
-                # the frame count holds, and keep nothing in it.
-                rec[:] = b"\x00" * len(rec)
-                out += head + rec
-                dropped += 1
-                continue
-        body = bytes(rec[rtlen:])
-        source_bodies.append(body)
+    # Pass one: learn. An address is learned only from a field where it is
+    # unambiguously an address, so a timestamp is never mistaken for one.
+    addrs = Addresses()
+    for b in bodies:
+        for off in address_spans(b):
+            addrs.map(bytes(b[off:off + 6]))
+    learned = {k: v for k, v in addrs.seen.items()}
+
+    # Pass two: replace, everywhere. Longest first is irrelevant since all
+    # are six bytes, but a learned address must never be rewritten twice,
+    # so the replacements are built against the original bytes.
+    out = bytearray(raw[:24])
+    frames, ssids, dropped, hits = 0, 0, 0, 0
+    for head, rec in recs:
+        frames += 1
+        rec = bytearray(rec)
+        body, rtlen = body_of(rec, link)
+        if body is None:
+            # A record whose radiotap header does not parse used to be
+            # written through untouched, which is the one case where
+            # "leave it alone" means "publish it". Keep the record so the
+            # frame count holds, and keep nothing in it.
+            rec[:] = b"\x00" * len(rec)
+            out += head + rec
+            dropped += 1
+            continue
 
         nb = bytearray(body)
-        for off in address_spans(body):
-            nb[off:off + 6] = addrs.map(bytes(nb[off:off + 6]))
+        for real, fake in learned.items():
+            start = 0
+            while True:
+                k = nb.find(real, start)
+                if k < 0:
+                    break
+                nb[k:k + 6] = fake
+                hits += 1
+                start = k + 6
         scrubbed, n = scrub_ssids(bytes(nb))
         ssids += n
         rec[rtlen:] = scrubbed
         out += head + rec
 
-    # The candidate set comes from the capture rather than from what the
-    # mapper noticed, so a missed offset shows up here instead of going
-    # quiet on both sides at once.
-    candidates = sweep_candidates(source_bodies) | set(addrs.seen)
+    candidates = sweep_candidates(bodies) | set(learned)
     leaked = sweep(bytes(out), candidates)
     print("  %s -> %s" % (src.name, dst.name))
     print("  %d frame(s), %d byte(s) in, %d out"
           % (frames, len(raw), len(out)))
-    print("  %d distinct address(es) replaced, %d SSID element(s) blanked"
-          % (len(addrs.seen), ssids))
+    print("  %d distinct address(es) learned, replaced %d time(s)"
+          % (len(learned), hits))
+    print("  %d SSID element(s) blanked" % ssids)
     print("  %d candidate(s) swept for, found by length rather than layout"
           % len(candidates))
     if dropped:
@@ -269,8 +302,8 @@ def main():
               % len(leaked))
         for m in leaked[:20]:
             print("    %s" % m.hex(":"))
-        print("\n  Nothing written. Every leak so far came from a layout")
-        print("  assumption in address_spans(); add the offset there.")
+        print("\n  Nothing written. An address was found in a field that")
+        print("  address_spans() does not name, so it was never learned.")
         return 1
 
     dst.write_bytes(bytes(out))

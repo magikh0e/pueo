@@ -11,6 +11,104 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.37 - 2026-10-05
+-------------------
+
+  Packet Monitor reported handshakes it had thrown away. Measured on the
+  board: the tracker counted the key frames and the file it was writing
+  held none of them.
+
+  * WHAT WAS WRONG.
+
+    A capture slot is taken in the promiscuous callback, filled, and handed
+    to a drain that writes it to the card and gives the slot back. That
+    drain runs in ptmLoop, a dozen records a pass, behind delay(10) and a
+    screen redraw, so capture throughput is paced by the display refresh.
+    A four-way handshake is four frames inside a few milliseconds, arriving
+    while the channel is busiest with the association that caused them. The
+    pool empties during that burst and the frames that matter are the ones
+    that do not fit.
+
+    The first attempt raised the pool from three slots to sixteen, on the
+    grounds that three was obviously too few and the S3 profile had ten.
+    That was a bet and the board called it: sixteen slots, four key frames
+    seen, four not written. Depth cannot fix this, because the window that
+    has to be covered is however long the screen takes.
+
+  * WHAT FIXED IT.
+
+    Eight slots above the general pool that only a frame the tracker has
+    just recognised as an EAPOL key frame may take. A beacon cannot reach
+    them however busy the channel is, so the four frames the feature exists
+    for cannot be crowded out by the traffic around them. Eight is two
+    complete exchanges.
+
+    Reserve slots are returned to their own free list, in the drain and on
+    close. Returning one to the general list would hand it to the next
+    beacon and the reserve would bleed away across a session, which is a
+    fault that only appears an hour in.
+
+    The general pool is sixteen anyway and the drain takes twenty-four
+    records a pass instead of twelve. Neither is load bearing now.
+
+    On hardware, after: six key frames seen, all written. One network with
+    M2 and M3. Before, across five captures and nineteen completed
+    associations on the parked channel: nothing.
+
+  * AND IT SAID SO ANYWAY, WHICH IS THE HALF THAT MATTERED.
+
+    The tracker runs before the frame-size check and before the queue. That
+    ordering is deliberate and stays: whether a handshake is recognised
+    should not depend on whether it fits the capture. It also meant the
+    screen read HS 1/1 and the console said key frames seen however few
+    reached the card, and the comment beside the indicator asserted the
+    frames were already in the pcap.
+
+    A capture missing a handshake is a bad afternoon. A capture missing a
+    handshake the device said it made is worse, because the first one gets
+    noticed.
+
+    A key frame the writer could not take is now counted. The indicator
+    shows HS u/t -n in red, both stop lines carry keyframes_lost, and the
+    first M2+M3 line says all written or says the pcap is incomplete. That
+    line is what found the sixteen-slot failure, one build after it was
+    added.
+
+  * tools/check_pcap_pool.py, 15 assertions.
+
+    That a reserve exists, that it holds a whole exchange, that only a key
+    frame reaches it, that both return paths route by origin, and that
+    every early return between the tracker and the write accounts for a key
+    frame, which is how this comes back: a new return added above the
+    write, dropping frames nothing counts. Confirmed by introducing each
+    fault and watching the matching assertion fail.
+
+  * A REAL HANDSHAKE IN THE FIXTURES.
+
+    tools/fixtures/ptm-eapol-handshake-qos.pcap, 46 frames, off this
+    hardware, and the first capture from this device that could contain one.
+    Six key frames because the access point retried M1 and M3, which is
+    ordinary and worth keeping: a count of EAPOL frames reaching four proves
+    nothing, and these are two M1, one M2, two M3 and one M4.
+
+    Every frame is QoS data with the payload at offset 26 rather than 24,
+    which is the layout a fixed-offset parser reads two bytes late and the
+    one no fixture covered. check_eapol.py classifies all six from the real
+    key_info bytes.
+
+    Addresses and SSIDs are replaced by tools/anonymise_capture.py, which
+    learns what the addresses are from header fields and then replaces each
+    of them wherever it occurs. It used to enumerate the fields instead, and
+    leaked three times: short control frames, the current access point field
+    in a reassociation request, and neighbour BSSIDs in the body of an
+    802.11k action frame. Enumeration was the wrong shape.
+
+    Fifty-four check scripts.
+
+  The EAPOL parser, the tracker and the on-screen arithmetic are unchanged.
+  Nothing was wrong with reading a handshake; what was wrong was keeping it.
+
+
 0.4.36 - 2026-10-05
 -------------------
 

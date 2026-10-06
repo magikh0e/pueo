@@ -169,7 +169,13 @@ static const uint8_t OBF_WB[]   = {75, 97, 110, 109, 122, 92, 109, 107, 96, 38, 
 #define ESP32DIV_ESB_RP_SEL_LINES  4
 #define ESP32DIV_ESB_RP_LOG_LINES  6
 #define ESP32DIV_MAX_WIFI_NETWORKS 28
-#define ESP32DIV_PCAP_POOL_SIZE    3
+/* Was 3, which lost every handshake. The pool is taken a slot at a time in
+ * the promiscuous callback and given back after a card write, so its depth
+ * is how long a burst can be before frames are dropped. A four-way exchange
+ * is four frames in a few milliseconds and it arrives while the channel is
+ * busy with the association that caused it. Sixteen slots of 549 bytes is
+ * 8.8 KB of heap, held only while Packet Monitor runs. */
+#define ESP32DIV_PCAP_POOL_SIZE    16
 #define ESP32DIV_PCAP_SNAP_LEN     512
 #define ESP32DIV_RFID_SRC_PAGES    128
 #endif
