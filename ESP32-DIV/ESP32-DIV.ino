@@ -146,13 +146,14 @@ const char *nrf_submenu_items[nrf_NUM_SUBMENU_ITEMS] = {
     "MouseJack Inject",
     "Back to Main Menu"};
 
-const int subghz_NUM_SUBMENU_ITEMS = 6;
+const int subghz_NUM_SUBMENU_ITEMS = 7;
 const char *subghz_submenu_items[subghz_NUM_SUBMENU_ITEMS] = {
     "Replay Attack",
     "SubGHz Jammer",
     "De Bruijn / Brute",
     "Jamming Detector",
     "Saved Profile",
+    "Import .sub",
     "Back to Main Menu"};
 
 /* System is the old Tools with Settings and About folded in. They were two
@@ -288,6 +289,7 @@ const unsigned char *subghz_submenu_icons[subghz_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_graph_self_loop,
     bitmap_icon_Voice_Id,
     bitmap_icon_list,
+    bitmap_icon_sdcard,
     bitmap_icon_go_back
 };
 
@@ -3229,6 +3231,7 @@ static void launchSubGhzFeature(int idx) {
         case 2: runSubmenuFeature(2, SubBrute::subBruteSetup, SubBrute::subBruteLoop, nullptr, false); break;
         case 3: runSubmenuFeature(3, jammingdetector::Setup, jammingdetector::Loop, nullptr, false); break;
         case 4: runSubmenuFeature(4, SavedProfile::saveSetup, SavedProfile::saveLoop, nullptr, false); break;
+        case 5: runSubmenuFeature(5, SubImport::setup, SubImport::loop, nullptr, false); break;
         default: break;
     }
 }

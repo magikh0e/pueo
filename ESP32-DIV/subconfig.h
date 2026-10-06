@@ -39,6 +39,11 @@ namespace SubBrute {
   void subBruteLoop();
 }
 
+namespace SubImport {
+  void setup();
+  void loop();
+}
+
 namespace jammingdetector {
   void Setup();
   void Loop();

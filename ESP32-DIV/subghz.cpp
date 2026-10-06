@@ -8,6 +8,7 @@
 #include "SettingsStore.h"
 #include "shared.h"
 #include "SpiBus.h"
+#include "SubFile.h"
 
 
 
@@ -3889,6 +3890,280 @@ void subBruteLoop() {
 }
 
 }  // namespace SubBrute
+
+namespace SubImport {
+
+/* Reading a Flipper `.sub` off the card into a saved profile.
+ *
+ * SubFile::parse has been able to do the hard half since it was written.
+ * What was missing was somewhere to put the result: the profile record was
+ * declared three times and saveProfile could not store anything without
+ * also prompting and drawing. Both are fixed, so this is a file list and a
+ * confirmation.
+ *
+ * No radio, so no Stealth gate. This reads one file and writes one EEPROM
+ * record; there is nothing here for Stealth to refuse.
+ */
+
+constexpr uint16_t kMaxFiles = 64;
+constexpr int      kRowH = 12;
+
+struct Entry {
+  String name;      // as shown, and the source of the profile name
+  String path;
+};
+
+std::vector<Entry> s_files;
+int      s_sel = 0;
+int      s_top = 0;
+String   s_status;
+bool     s_statusWarn = false;
+bool     s_needRedraw = true;
+bool     s_mounted = false;   // this screen's own, not another feature's
+
+/* `.sub`, case-insensitively, and nothing else. */
+static bool isSubFile(const String& name) {
+  if (name.length() < 5) return false;
+  String tail = name.substring(name.length() - 4);
+  tail.toLowerCase();
+  return tail == ".sub";
+}
+
+/* The profile name: the filename without its extension, cut to fit.
+ *
+ * A `.sub` carries no name of its own. Asking for one would put a keyboard
+ * between choosing a file and finding out whether it parses, which is the
+ * wrong order: the step that can fail should come first. */
+static String nameFromFile(const String& fileName) {
+  int dot = fileName.lastIndexOf('.');
+  String stem = (dot > 0) ? fileName.substring(0, dot) : fileName;
+  if (stem.length() > MAX_NAME_LENGTH - 1) {
+    stem = stem.substring(0, MAX_NAME_LENGTH - 1);
+  }
+  return stem;
+}
+
+static void scan() {
+  s_files.clear();
+  s_sel = 0;
+  s_top = 0;
+
+  /* The CC1101 and the card share the SPI bus on this board, so a
+   * plain SD.open fails after any sub-GHz feature has run. The jamming
+   * detector mounts it this way for the same reason. */
+  if (!(s_mounted && SD.exists("/"))) {
+#if defined(CC1101_CS)
+    pinMode(CC1101_CS, OUTPUT);
+    digitalWrite(CC1101_CS, HIGH);
+#endif
+    restoreSdAfterSharedSpi();
+    s_mounted = isSDCardAvailable();
+  }
+  if (!s_mounted) {
+    s_status = "No SD card";
+    s_statusWarn = true;
+    return;
+  }
+
+  File dir = SD.open(SUBGHZ_SD_DIR);
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    s_status = String("No ") + SUBGHZ_SD_DIR;
+    s_statusWarn = true;
+    return;
+  }
+
+  for (File e = dir.openNextFile(); e; e = dir.openNextFile()) {
+    if (!e.isDirectory()) {
+      String n = e.name();
+      int slash = n.lastIndexOf('/');
+      if (slash >= 0) n = n.substring(slash + 1);
+      if (isSubFile(n) && s_files.size() < kMaxFiles) {
+        Entry it;
+        it.name = n;
+        it.path = String(SUBGHZ_SD_DIR) + "/" + n;
+        s_files.push_back(it);
+      }
+    }
+    e.close();
+  }
+  dir.close();
+
+  std::sort(s_files.begin(), s_files.end(),
+            [](const Entry& a, const Entry& b) { return a.name < b.name; });
+
+  if (s_files.empty()) {
+    s_status = "No .sub files";
+    s_statusWarn = false;
+  } else {
+    s_status = String(s_files.size()) + " file(s)";
+    s_statusWarn = false;
+  }
+}
+
+/* Read the chosen file, parse it, and store what comes out.
+ *
+ * Every failure says which one it was. "Import failed" on its own would
+ * leave somebody guessing between a card that is not there, a RAW capture
+ * that cannot become a profile, and a frequency this radio cannot reach,
+ * which are three different things to do next. */
+static void importSelected() {
+  if (s_files.empty()) return;
+  const Entry& it = s_files[s_sel];
+
+  File fh = SD.open(it.path.c_str(), FILE_READ);
+  if (!fh) {
+    s_status = "Cannot open file";
+    s_statusWarn = true;
+    return;
+  }
+  const size_t len = fh.size();
+  if (len == 0 || len > 8192) {
+    fh.close();
+    s_status = (len == 0) ? "File is empty" : "File too large";
+    s_statusWarn = true;
+    return;
+  }
+
+  std::vector<char> buf(len + 1);
+  const size_t got = fh.read((uint8_t*)buf.data(), len);
+  fh.close();
+  buf[got] = '\0';
+
+  SubFile::Parsed parsed{};
+  const SubFile::Result r = SubFile::parse(buf.data(), got, &parsed);
+  if (r != SubFile::Result::Ok) {
+    s_status = SubFile::resultText(r);
+    s_statusWarn = true;
+    return;
+  }
+
+  String err;
+  bool rotated = false;
+  if (!replayat::makeRoomForProfile(&err, &rotated)) {
+    s_status = "Full, export failed";
+    s_statusWarn = true;
+    return;
+  }
+
+  const SubGhzProfile p = replayat::makeProfile(
+      parsed.frequency, parsed.value, parsed.bitLength, parsed.protocol,
+      nameFromFile(it.name).c_str());
+  replayat::storeProfile(p);
+
+  s_status = rotated ? "Imported, 5 sent to SD"
+                     : String("Imported to slot ")
+                           + String(replayat::profileCount);
+  s_statusWarn = false;
+}
+
+static void draw() {
+  subghzClearBody(TFT_BLACK);
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+
+  const int top = 30 + replayat::yshift;
+  const int bottom = subghzContentBottom();
+  const int rows = (bottom - top - 14) / kRowH;
+
+  tft.setTextColor(UI_TEXT, TFT_BLACK);
+  tft.setCursor(6, top - 12);
+  tft.print("Import .sub");
+
+  if (s_files.empty()) {
+    tft.setTextColor(s_statusWarn ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
+    tft.setCursor(6, top + 6);
+    tft.print(s_status);
+    tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+    tft.setCursor(6, top + 20);
+    tft.print("put files in ");
+    tft.print(SUBGHZ_SD_DIR);
+    return;
+  }
+
+  if (s_sel < s_top) s_top = s_sel;
+  if (rows > 0 && s_sel >= s_top + rows) s_top = s_sel - rows + 1;
+
+  for (int i = 0; i < rows && (s_top + i) < (int)s_files.size(); i++) {
+    const int idx = s_top + i;
+    const int y = top + i * kRowH;
+    const bool on = (idx == s_sel);
+    tft.setTextColor(on ? TFT_BLACK : UI_TEXT, on ? UI_ICON : TFT_BLACK);
+    tft.setCursor(6, y);
+    String n = s_files[idx].name;
+    if (n.length() > 30) n = n.substring(0, 29) + "~";
+    tft.print(on ? ">" : " ");
+    tft.print(n);
+  }
+
+  tft.setTextColor(s_statusWarn ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
+  tft.setCursor(6, bottom - 12);
+  tft.print(s_status);
+}
+
+void setup() {
+  setTouchButtonInputEnabled(true);
+  setTouchNavLabels("", "Next", "Exit", "Prev", "Import");
+
+  EEPROM.begin(EEPROM_SIZE);
+  replayat::loadProfileCount();
+
+  scan();
+  s_needRedraw = true;
+
+  subghzClearBody(TFT_BLACK);
+  setupTouchscreen();
+  float v = readBatteryVoltage();
+  drawStatusBar(v, true);
+  replayat::uiDrawn = false;
+  replayat::runUI();
+  subghzRedrawNavChrome();
+}
+
+void loop() {
+  if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+    feature_exit_requested = true;
+    return;
+  }
+
+  maintainTouchNavBar();
+  replayat::runUI();
+
+  static unsigned long lastMs = 0;
+  const unsigned long debounce = 200;
+
+  static bool pUp = false, pDown = false, pRight = false;
+  const bool up    = isPhysicalButtonPressed(BTN_UP);
+  const bool down  = isPhysicalButtonPressed(BTN_DOWN);
+  const bool go    = isPhysicalButtonPressed(BTN_RIGHT);
+
+  if (!s_files.empty() && millis() - lastMs > debounce) {
+    if (down && !pDown) {
+      s_sel = (s_sel + 1) % (int)s_files.size();
+      s_needRedraw = true;
+      lastMs = millis();
+    } else if (up && !pUp) {
+      s_sel = (s_sel - 1 + (int)s_files.size()) % (int)s_files.size();
+      s_needRedraw = true;
+      lastMs = millis();
+    } else if (go && !pRight) {
+      importSelected();
+      s_needRedraw = true;
+      lastMs = millis();
+    }
+  }
+  pUp = up; pDown = down; pRight = go;
+
+  if (s_needRedraw) {
+    draw();
+    s_needRedraw = false;
+    subghzRedrawNavChrome();
+  }
+
+  delay(10);
+}
+
+}  // namespace SubImport
 
 namespace jammingdetector {
 
