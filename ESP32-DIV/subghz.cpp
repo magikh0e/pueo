@@ -628,15 +628,21 @@ const char* randomNames[] = {
 };
 const uint8_t numRandomNames = 10;
 
-struct __attribute__((packed)) Profile {
-    uint32_t frequency;
-    uint32_t value;
-    uint16_t bitLength;
-    uint16_t protocol;
-    char name[MAX_NAME_LENGTH];
-};
-
-#define PROFILE_SIZE sizeof(Profile)
+/* The record that goes into EEPROM, declared once for the whole file.
+ *
+ * This was three structs with the same five fields: one here, one in
+ * SavedProfile, and SubGhzProfile at the top. The export and sync paths
+ * used SubGhzProfile, saveProfile used this one, and the browser used the
+ * third. They agreed, which is the only reason a record written by one was
+ * readable by the others. Editing one would have reinterpreted every
+ * profile already in EEPROM, and a saved capture would have come back wrong
+ * rather than anything failing.
+ *
+ * PROFILE_SIZE was doubled the same way, a constexpr at file scope and a
+ * macro in each namespace shadowing it from there on. The constexpr lives
+ * in the anonymous namespace at the top and is visible here, so the macros
+ * are gone. */
+using Profile = SubGhzProfile;
 
 uint16_t profileCount = 0;
 
@@ -1754,15 +1760,9 @@ static bool uiDrawn = false;
 constexpr int SCREEN_WIDTH = PUEO_SCREEN_W;
 
 RCSwitch mySwitch = RCSwitch();
-struct __attribute__((packed)) Profile {
-    uint32_t frequency;
-    uint32_t value;
-    uint16_t bitLength;
-    uint16_t protocol;
-    char name[MAX_NAME_LENGTH];
-};
-
-#define PROFILE_SIZE sizeof(Profile)
+/* The same record as replayat's, and the same one SubGhzProfile describes.
+ * See the note on the alias in replayat for why there is only one now. */
+using Profile = SubGhzProfile;
 
 uint16_t profileCount = 0;
 uint16_t currentProfileIndex = 0;

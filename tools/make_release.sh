@@ -150,6 +150,7 @@ INCLUDE=(
   "tools/check_spotter_capture.py"
   "tools/check_eapol.py"
   "tools/check_pcap_pool.py"
+  "tools/check_profile_record.py"
   "tools/fixtures/README.md"
   "tools/fixtures/manifest.json"
   "tools/fixtures/ptm-mixed-no-eapol.pcap"
