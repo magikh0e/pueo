@@ -252,13 +252,34 @@ say so in a way that is easy to fix and hard to guess.
    first two. Nothing calls it yet.
 3. **Done.** `classify`, `addresses` and the per-AP tracker, in the same
    file. `tools/check_eapol_locate.py` became `tools/check_eapol.py` and
-   covers all of it: 124,315 checks.
+   covers all of it: 124,322 checks.
 4. **Done.** Packet Monitor offers every frame to the tracker and shows
    `HS <usable>/<total>` beside the packet counter, amber until a network
    has M2 and M3 and green once one does, with a line on the serial console
    when that first happens. The frames were already going to the pcap; this
    is the part that says so. 1,224 bytes of flash and 392 of RAM, the latter
    being sixteen rows of twenty-four bytes.
+5. **Done.** The same parser, over captures rather than frames this
+   repository wrote. Synthetic frames can only ask about a layout somebody
+   thought of, and one missing from the parser is missing from the test for
+   the same reason, because one hand chose the question and the answer. So
+   `check_eapol.py` ends by reading a classic pcap, stripping the 19-byte
+   radiotap header the monitor writes, and running the transcribed
+   `findPayload` and `classify` over every frame in
+   `tools/fixtures/`. `manifest.json` declares what each file should yield
+   and every entry has to name a source and a licence.
+
+   The first fixture has no handshake in it, which is the case that cannot
+   be synthesised honestly: 658 frames off a real radio, malformed ones
+   included, read without a single out-of-bounds access, reporting no EAPOL
+   and refusing 109 encrypted data frames. A false positive there would be
+   a row claiming a handshake nobody sent.
+
+   Addresses and SSIDs are replaced in place by
+   `tools/anonymise_capture.py`, which keeps every length, frame control
+   field and header layout and therefore everything the checks read. It
+   invalidates any handshake MIC, which nothing here verifies; if something
+   ever does, that script stops being suitable.
 
    The tracker has no locking of its own, deliberately. That is what lets
    the checker run it on a host. The promiscuous callback and the UI are

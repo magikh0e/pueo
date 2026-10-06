@@ -1,0 +1,17 @@
+{
+  "fixtures": [
+    {
+      "file": "ptm-mixed-no-eapol.pcap",
+      "source": "Captured with Pueo 0.4.36, WiFi > Packet Monitor, on a home network belonging to magikh0e. Addresses and SSIDs replaced in place by tools/anonymise_capture.py; every length, frame control field and header layout is the captured one.",
+      "licence": "GPL-3.0-or-later, as part of this repository",
+      "note": "Real traffic with no handshake in it, which is the case that cannot be synthesised honestly: 658 frames off an actual radio, malformed ones included, and the parser has to read all of them without a single out-of-bounds access and report no EAPOL at all. A false positive here would be a row on the screen claiming a handshake nobody transmitted. Packet Monitor was in listen-all mode and hopping, so the four-way exchanges implied by the association frames in it were on another channel when they happened.",
+      "expect": {
+        "frames": 658,
+        "eapol": 0,
+        "protected": 109,
+        "headers": {},
+        "msgs": {}
+      }
+    }
+  ]
+}

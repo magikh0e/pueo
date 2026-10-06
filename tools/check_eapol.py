@@ -599,7 +599,12 @@ def survey(path):
         fr = Frame(bytes(body), n)
         off = find_payload(fr, n)
         if off < 0:
-            if n >= 2 and (body[1] & PROTECTED):
+            # Data frames only. The Protected bit on a management frame is
+            # either 802.11w or a corrupt frame, and neither is the thing
+            # findPayload refuses; counting those made the number a measure
+            # of how much garbage the capture held.
+            is_data = ((body[0] >> 2) & 0x03) == TYPE_DATA
+            if is_data and n >= 2 and (body[1] & PROTECTED):
                 seen["protected"] += 1
             continue
         seen["eapol"] += 1
@@ -647,8 +652,19 @@ else:
             continue
         seen = survey(path)
         want = entry["expect"]
+        if "frames" in want:
+            case("%s: %d frame(s) in the file" % (name, want["frames"]),
+                 seen["frames"] == want["frames"])
         case("%s: %d frame(s) carry 802.1X" % (name, want["eapol"]),
              seen["eapol"] == want["eapol"])
+        # Pinned because an anonymiser or a trim that dropped the encrypted
+        # frames would leave the fixture passing while testing less: a
+        # Protected frame is one findPayload has to refuse before it reads
+        # anything, and a file without any stops asking that.
+        if "protected" in want:
+            case("%s: %d encrypted data frame(s) refused"
+                 % (name, want["protected"]),
+                 seen["protected"] == want["protected"])
         for hdr, n in sorted(want.get("headers", {}).items()):
             case("%s: %d frame(s) at a %s-byte header" % (name, n, hdr),
                  seen["headers"].get(int(hdr), 0) == n)
