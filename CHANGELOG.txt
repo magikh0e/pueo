@@ -11,6 +11,49 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.40 - 2026-10-06
+-------------------
+
+  Nothing reaches the device. No file under ESP32-DIV/ changed, so the image
+  is 0.4.39's apart from the version string. What is in it is a second
+  handshake fixture and the assertions that read it.
+
+  * THE CLEAN HANDSHAKE, BESIDE THE ONE WITH RETRIES.
+
+    tools/fixtures/ptm-eapol-handshake-once.pcap, 45 frames. Exactly one of
+    each message, no retransmission, so M1 M2 M3 M4 and nothing to tell
+    apart.
+
+    The one already there has two M1 and two M3, which is what made it worth
+    keeping: a parser that counts EAPOL frames rather than classifying them
+    passes a four-frame count and gets the wrong answer. This is the other
+    shape, and the pair is the point. One catches a counter, the other
+    catches a classifier that only works when the messages happen to be
+    distinct, and a fixture that only ever shows one shape cannot do both.
+
+  * WHERE IT CAME FROM.
+
+    Off 0.4.39, from a capture where the general pool dropped 1,387 of 4,268
+    frames, 32 per cent, while these four arrived consecutively at records
+    1978 to 1982 and every one reached the card. That is the reserve under
+    the pressure that used to destroy the burst rather than on a quiet
+    channel where any pool would have held.
+
+    Verified in the file by raw byte search before trimming, not by the
+    parser it is a fixture for: four SNAP sequences, four frames carrying
+    them, all at offset 26, all EAPOL-Key type 3, key_info matching
+    Wireshark's own WPA reference capture to the bit. The frame count
+    reconciles with what the device reported, 2,881 written against 2,881
+    records.
+
+  * check_eapol.py is 124,344 assertions, eleven more than 0.4.39: the
+    source and licence the manifest requires, the file being present, and
+    its frame, EAPOL, encrypted-frame, header-layout and four message
+    counts. Confirmed load bearing by dropping a record from the fixture.
+
+    Fifty-four check scripts.
+
+
 0.4.39 - 2026-10-06
 -------------------
 
