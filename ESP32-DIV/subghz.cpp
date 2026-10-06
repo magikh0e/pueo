@@ -1250,85 +1250,128 @@ void readProfileCount() {
     if (profileCount > MAX_PROFILES) profileCount = 0;
 }
 
-void saveProfile() {
+/* Make a slot available, exporting and clearing when EEPROM is full.
+ *
+ * Split out of saveProfile() because it is the part that can fail, and it
+ * has to run before anything prompts: the original checked for room first
+ * and only then asked for a name, which is the right order. Folding this
+ * into the write would mean asking for a name and then saying there is no
+ * space for it.
+ *
+ * Returns false only when EEPROM is full and the export failed, with `err`
+ * naming why. True means storeProfile() will find a slot.
+ *
+ * `rotated` says the five that were there went to the card and EEPROM was
+ * cleared, which the caller should mention rather than leave to be noticed.
+ */
+bool makeRoomForProfile(String* err = nullptr, bool* rotated = nullptr) {
     readProfileCount();
-
-    if (profileCount >= MAX_PROFILES) {
-
-        String err, outPath;
-        if (exportProfilesToSD(outPath, &err)) {
-            clearProfilesInEeprom();
-            profileCount = 0;
-
-            syncCurrentProfilesToSD(nullptr);
-        } else {
-            subghzClearBody(TFT_BLACK);
-            tft.setTextSize(1);
-            tft.setCursor(10, 30 + yshift);
-            tft.setTextColor(UI_WARN, TFT_BLACK);
-            tft.print("Storage full!");
-            tft.setCursor(10, 45 + yshift);
-            tft.setTextColor(UI_TEXT, TFT_BLACK);
-            tft.print("Insert SD / export fail");
-            tft.setCursor(10, 60 + yshift);
-            tft.print(err);
-            uiDrawn = false;
-            runUI();
-            subghzRedrawNavChrome();
-            if (!subghzWaitWithNav(2000)) {
-              return;
-            }
-            replayRestoreStatusPanel();
-            float currentBatteryVoltage = readBatteryVoltage();
-            drawStatusBar(currentBatteryVoltage, true);
-            uiDrawn = false;
-            runUI();
-            subghzRedrawNavChrome();
-            return;
-        }
-    }
+    if (rotated != nullptr) *rotated = false;
 
     if (profileCount < MAX_PROFILES) {
+        return true;
+    }
 
-        String customName = getUserInputName();
+    String outPath;
+    if (!exportProfilesToSD(outPath, err)) {
+        return false;
+    }
+    clearProfilesInEeprom();
+    profileCount = 0;
+    syncCurrentProfilesToSD(nullptr);
+    if (rotated != nullptr) *rotated = true;
+    return true;
+}
 
-        tft.setTextSize(1);
+/* Write a record to the next free slot. Assumes makeRoomForProfile() said
+ * yes, which is the caller's job and is why this cannot fail. Returns the
+ * slot it used. */
+uint16_t storeProfile(const Profile& p) {
+    const int addr = ADDR_PROFILE_START + (profileCount * PROFILE_SIZE);
+    EEPROM.put(addr, p);
+    EEPROM.commit();
 
-        Profile newProfile;
-        newProfile.frequency = subghz_frequency_list[currentFrequencyIndex];
-        newProfile.value = (uint32_t)receivedValue;
-        newProfile.bitLength = (uint16_t)receivedBitLength;
-        newProfile.protocol = (uint16_t)receivedProtocol;
-        strncpy(newProfile.name, customName.c_str(), MAX_NAME_LENGTH - 1);
-        newProfile.name[MAX_NAME_LENGTH - 1] = '\0';
+    const uint16_t slot = profileCount;
+    profileCount++;
+    EEPROM.put(ADDR_PROFILE_COUNT, profileCount);
+    EEPROM.commit();
 
-        int addr = ADDR_PROFILE_START + (profileCount * PROFILE_SIZE);
-        EEPROM.put(addr, newProfile);
-        EEPROM.commit();
+    syncCurrentProfilesToSD(nullptr);
+    return slot;
+}
 
-        profileCount++;
+/* Build a record from a capture. The name is the caller's, because only the
+ * caller knows whether it came from a keyboard or out of a file. */
+Profile makeProfile(uint32_t frequency, uint32_t value, uint16_t bitLength,
+                    uint16_t protocol, const char* name) {
+    Profile p{};
+    p.frequency = frequency;
+    p.value = value;
+    p.bitLength = bitLength;
+    p.protocol = protocol;
+    strncpy(p.name, name ? name : "", MAX_NAME_LENGTH - 1);
+    p.name[MAX_NAME_LENGTH - 1] = '\0';
+    return p;
+}
 
-        EEPROM.put(ADDR_PROFILE_COUNT, profileCount);
-        EEPROM.commit();
+void saveProfile() {
+    String err;
+    bool rotated = false;
 
-        syncCurrentProfilesToSD(nullptr);
-
+    if (!makeRoomForProfile(&err, &rotated)) {
         subghzClearBody(TFT_BLACK);
-        tft.setCursor(10, 30 + yshift);
-        tft.print("Profile saved!");
-        tft.setCursor(10, 40 + yshift);
-        tft.print("Name: ");
-        tft.print(newProfile.name);
-        tft.setCursor(10, 50 + yshift);
-        tft.print("Profiles saved: ");
-        tft.println(profileCount);
-
-    } else {
-        subghzClearBody(TFT_BLACK);
         tft.setTextSize(1);
         tft.setCursor(10, 30 + yshift);
+        tft.setTextColor(UI_WARN, TFT_BLACK);
+        tft.print("Storage full!");
+        tft.setCursor(10, 45 + yshift);
         tft.setTextColor(UI_TEXT, TFT_BLACK);
-        tft.print("Profile storage full!");
+        tft.print("Insert SD / export fail");
+        tft.setCursor(10, 60 + yshift);
+        tft.print(err);
+        uiDrawn = false;
+        runUI();
+        subghzRedrawNavChrome();
+        if (!subghzWaitWithNav(2000)) {
+          return;
+        }
+        replayRestoreStatusPanel();
+        float v = readBatteryVoltage();
+        drawStatusBar(v, true);
+        uiDrawn = false;
+        runUI();
+        subghzRedrawNavChrome();
+        return;
+    }
+
+    String customName = getUserInputName();
+    tft.setTextSize(1);
+
+    const Profile newProfile = makeProfile(
+        subghz_frequency_list[currentFrequencyIndex],
+        (uint32_t)receivedValue,
+        (uint16_t)receivedBitLength,
+        (uint16_t)receivedProtocol,
+        customName.c_str());
+
+    storeProfile(newProfile);
+
+    subghzClearBody(TFT_BLACK);
+    tft.setCursor(10, 30 + yshift);
+    tft.print("Profile saved!");
+    tft.setCursor(10, 40 + yshift);
+    tft.print("Name: ");
+    tft.print(newProfile.name);
+    tft.setCursor(10, 50 + yshift);
+    tft.print("Profiles saved: ");
+    tft.println(profileCount);
+    if (rotated) {
+        /* Said, rather than left to be noticed later: the five that were
+         * there are on the card now and not in EEPROM. */
+        tft.setCursor(10, 60 + yshift);
+        tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+        tft.print("earlier five exported to SD");
+        tft.setTextColor(UI_TEXT, TFT_BLACK);
     }
 
     uiDrawn = false;

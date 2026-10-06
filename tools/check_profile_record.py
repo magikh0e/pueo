@@ -41,6 +41,14 @@ What it asserts
                   records written by earlier firmware, so changing this is
                   changing a file format, and that should be a decision
                   rather than an edit.
+
+  the seam        saveProfile() was split so an import could reach the part
+                  that stores a record without the part that reads globals
+                  or draws. makeRoomForProfile() has to run before anything
+                  prompts, because it is the step that can fail: the first
+                  attempt at this split asked for a name and only then found
+                  there was no room. storeProfile() must not prompt or draw,
+                  or it is not reusable and the split bought nothing.
 """
 import re
 import sys
@@ -112,6 +120,46 @@ def main():
            "EEPROM holds records in the old shape: %r" % (fields,))
         ok("  which is %d bytes" % RECORD_BYTES,
            fields == LAYOUT, "the record size moved")
+
+    # ── the seam saveProfile was split along ───────────────────────────
+    def body(sig):
+        i = src.index(sig)
+        j = src.index("\n}\n", i)
+        return src[i:j]
+
+    save = body("void saveProfile() {")
+    store = body("uint16_t storeProfile(")
+    room = body("bool makeRoomForProfile(")
+
+    ok("storeProfile does not prompt",
+       "getUserInputName" not in store,
+       "the write asks for a name, so an import cannot use it")
+    ok("  and does not draw",
+       "tft." not in store,
+       "the write touches the screen, so an import cannot use it")
+    ok("  and reads no capture globals",
+       not any(g in store for g in ("receivedValue", "receivedBitLength",
+                                    "receivedProtocol",
+                                    "currentFrequencyIndex")),
+       "the write still reads the globals it was split away from")
+
+    ok("makeRoomForProfile owns the overflow",
+       "exportProfilesToSD" in room and "clearProfilesInEeprom" in room,
+       "the rotation is not in the step that can fail")
+    ok("  and storeProfile does not repeat it",
+       "exportProfilesToSD" not in store,
+       "both halves export, so a full store would export twice")
+
+    # The order is the behaviour: the step that can fail runs first, so a
+    # name is never asked for and then thrown away.
+    if "makeRoomForProfile" in save and "getUserInputName" in save:
+        ok("room is made before the name is asked for",
+           save.index("makeRoomForProfile") < save.index("getUserInputName"),
+           "saveProfile prompts first, so a full device asks for a name and "
+           "then refuses it")
+    else:
+        ok("room is made before the name is asked for", False,
+           "saveProfile no longer calls both")
 
     print()
     if FAILED:
