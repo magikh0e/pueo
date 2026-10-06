@@ -15,6 +15,18 @@ It says nothing about the compiled C. What it checks is that the arithmetic
 the C encodes is right.
 
     python tools/check_eapol.py
+
+Synthetic frames can only ask about a layout somebody thought of: one absent
+from the parser is absent from the test for the same reason, because the
+same hand wrote both. So the last pass runs the same transcribed functions
+over captures in tools/fixtures/, which is the part neither hand wrote. See
+the README there for what may go in it.
+
+    python tools/check_eapol.py --capture some.pcap
+
+reads any classic pcap at link type 105 or 127 and prints what it found,
+asserting nothing. That is for checking this checker against a capture you
+trust and have no right to redistribute.
 """
 # This check does not read the firmware: it reimplements the function(s)
 # below and tests the reimplementation, so a change to the C cannot fail it.
@@ -500,6 +512,155 @@ for trial in range(4000):
 # and the invariant stated plainly: frames per arming are bounded
 case("an arming can cost at most %d frames" % (ASSIST_MAX_BURSTS * 2),
      ASSIST_MAX_BURSTS * 2 == 12)
+
+# --- and the same parser, over frames nobody here wrote --------------------
+#
+# Everything above builds its own frames, so it can only ever ask about a
+# layout somebody thought of. A capture does not have that property. These
+# read a classic pcap, strip the radiotap header Pueo writes, and run the
+# transcribed findPayload and classify over every frame in it.
+#
+# tools/fixtures/manifest.json says what each file should yield. A fixture
+# swapped for one that does not exercise the same shapes fails rather than
+# quietly testing less.
+
+import json
+import os
+import struct
+import sys
+
+FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+PCAP_MAGICS = {
+    b"\xd4\xc3\xb2\xa1": ("<", 1),
+    b"\xa1\xb2\xc3\xd4": (">", 1),
+    b"\x4d\x3c\xb2\xa1": ("<", 1000),
+    b"\xa1\xb2\x3c\x4d": (">", 1000),
+}
+
+DLT_IEEE802_11 = 105
+DLT_IEEE802_11_RADIOTAP = 127
+
+
+def read_pcap(path):
+    """(link type, [frame bytes]). Classic pcap only; pcapng is not read."""
+    raw = open(path, "rb").read()
+    if len(raw) < 24:
+        raise ValueError("%s: too short to be a pcap" % path)
+    if raw[:4] not in PCAP_MAGICS:
+        raise ValueError("%s: not a classic pcap (magic %s)"
+                         % (path, raw[:4].hex()))
+    end = PCAP_MAGICS[raw[:4]][0]
+    link = struct.unpack(end + "I", raw[20:24])[0]
+    out, i = [], 24
+    while i + 16 <= len(raw):
+        _ts, _us, caplen, _orig = struct.unpack(end + "IIII", raw[i:i + 16])
+        i += 16
+        if caplen > len(raw) - i:
+            raise ValueError("%s: record claims %d bytes, %d remain"
+                             % (path, caplen, len(raw) - i))
+        out.append(raw[i:i + caplen])
+        i += caplen
+    return link, out
+
+
+def strip_radiotap(buf):
+    """The 802.11 frame inside a radiotap-prefixed record, or None.
+
+    it_len is little endian regardless of the pcap's own byte order, which
+    is in the radiotap spec and is the kind of thing that is easy to get
+    wrong once and never notice, because the common case is a capture whose
+    byte order already agrees.
+    """
+    if len(buf) < 8:
+        return None
+    if buf[0] != 0:                       # it_version, always zero so far
+        return None
+    it_len = struct.unpack("<H", buf[2:4])[0]
+    if it_len < 8 or it_len > len(buf):
+        return None
+    return buf[it_len:]
+
+
+def survey(path):
+    """What the transcribed parser makes of every frame in a capture."""
+    link, records = read_pcap(path)
+    if link not in (DLT_IEEE802_11, DLT_IEEE802_11_RADIOTAP):
+        raise ValueError("%s: link type %d is not 802.11" % (path, link))
+
+    seen = {"frames": len(records), "eapol": 0, "headers": {}, "msgs": {},
+            "protected": 0, "short": 0}
+    for rec in records:
+        body = rec if link == DLT_IEEE802_11 else strip_radiotap(rec)
+        if body is None or len(body) < 2:
+            seen["short"] += 1
+            continue
+        n = len(body)
+        fr = Frame(bytes(body), n)
+        off = find_payload(fr, n)
+        if off < 0:
+            if n >= 2 and (body[1] & PROTECTED):
+                seen["protected"] += 1
+            continue
+        seen["eapol"] += 1
+        hdr = off - SNAP_LEN
+        seen["headers"][hdr] = seen["headers"].get(hdr, 0) + 1
+        msg = classify(fr, n, off)
+        key = msg if msg else "not-a-key-frame"
+        seen["msgs"][key] = seen["msgs"].get(key, 0) + 1
+    return seen
+
+
+def report(path, seen):
+    print("  %s" % os.path.basename(path))
+    print("    %d frame(s), %d carrying 802.1X"
+          % (seen["frames"], seen["eapol"]))
+    for hdr in sorted(seen["headers"]):
+        print("      %2d-byte header   %4d" % (hdr, seen["headers"][hdr]))
+    for k in sorted(seen["msgs"]):
+        print("      %-16s %4d" % (k, seen["msgs"][k]))
+
+
+# Run by hand against a capture that is not in the repository, to check this
+# checker rather than the fixtures. Asserts nothing.
+if "--capture" in sys.argv:
+    for arg in sys.argv[sys.argv.index("--capture") + 1:]:
+        report(arg, survey(arg))
+    raise SystemExit(0)
+
+manifest_path = os.path.join(FIXTURES, "manifest.json")
+if not os.path.isfile(manifest_path):
+    print("no tools/fixtures/manifest.json, so no capture is checked")
+else:
+    manifest = json.load(open(manifest_path, encoding="utf-8"))
+    entries = manifest.get("fixtures", [])
+    case("the manifest lists at least one capture", bool(entries))
+    for entry in entries:
+        name = entry["file"]
+        path = os.path.join(FIXTURES, name)
+        case("%s: every fixture names a source" % name,
+             bool(entry.get("source")))
+        case("%s: every fixture names a licence" % name,
+             bool(entry.get("licence")))
+        case("%s: the file is present" % name, os.path.isfile(path))
+        if not os.path.isfile(path):
+            continue
+        seen = survey(path)
+        want = entry["expect"]
+        case("%s: %d frame(s) carry 802.1X" % (name, want["eapol"]),
+             seen["eapol"] == want["eapol"])
+        for hdr, n in sorted(want.get("headers", {}).items()):
+            case("%s: %d frame(s) at a %s-byte header" % (name, n, hdr),
+                 seen["headers"].get(int(hdr), 0) == n)
+        for msg, n in sorted(want.get("msgs", {}).items()):
+            case("%s: %d %s" % (name, n, msg),
+                 seen["msgs"].get(msg, 0) == n)
+        # The point of the fixture: a capture with one header layout in it
+        # tests nothing the synthetic frames did not already cover.
+        if want.get("layouts_at_least"):
+            case("%s: more than one header layout" % name,
+                 len(seen["headers"]) >= want["layouts_at_least"])
+
 
 print("ok -- %d checks, no out-of-bounds read" % checks)
 print("payload offsets: 32 / 34 / 38 / 38 for 3-addr, QoS, 4-addr, QoS+HT")

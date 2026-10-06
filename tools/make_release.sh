@@ -149,6 +149,7 @@ INCLUDE=(
   "tools/check_spotter_merge.py"
   "tools/check_spotter_capture.py"
   "tools/check_eapol.py"
+  "tools/fixtures/README.md"
   "tools/check_airtag_parse.py"
   "tools/check_sub_parse.py"
   "tools/check_fastpair.py"
