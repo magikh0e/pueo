@@ -123,6 +123,33 @@ def main():
                     bad.append("%r is %d px in a %d px tile on the %s panel"
                                % (label, w, worst, panel))
 
+    # ── which entry is Back, derived rather than written down ──────────
+    #
+    # A handler that compares current_submenu_index against a literal is
+    # correct until an entry is inserted above Back. The SubGHz handler said
+    # 5, Back moved to 6, and the literal then named the new feature: that
+    # entry went to the main menu and Back did nothing, because the switch
+    # had no case for 6. Both from one constant, and it compiled.
+    lines = src.split("\n")
+    for i, ln in enumerate(lines):
+        m = re.search(r"current_submenu_index == (\d+)\)", ln)
+        if not m:
+            continue
+        # The Back branch is the one that leaves for the main menu.
+        if "displayMenu()" not in "\n".join(lines[i:i + 8]):
+            continue
+        fn = "?"
+        for j in range(i, -1, -1):
+            g = re.match(r"(?:static )?void (handle\w+SubmenuButtons)\(\)",
+                         lines[j])
+            if g:
+                fn = g.group(1)
+                break
+        bad.append("%s line %d compares Back against the literal %s; use "
+                   "<menu>_NUM_SUBMENU_ITEMS - 1, or inserting an entry "
+                   "above Back silently reassigns both"
+                   % (fn, i + 1, m.group(1)))
+
     print()
     if bad:
         print("FAILED:", file=sys.stderr)

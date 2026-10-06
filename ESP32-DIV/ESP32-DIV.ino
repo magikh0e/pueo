@@ -3262,7 +3262,7 @@ void handleNRFSubmenuButtons() {
         last_interaction_time = millis();
         delay(200);
 
-        if (current_submenu_index == 6) {
+        if (current_submenu_index == nrf_NUM_SUBMENU_ITEMS - 1) {
             in_sub_menu = false;
             feature_active = false;
             feature_exit_requested = false;
@@ -3294,7 +3294,7 @@ void handleNRFSubmenuButtons() {
                 displaySubmenu();
                 delay(200);
 
-                if (current_submenu_index == 6) {
+                if (current_submenu_index == nrf_NUM_SUBMENU_ITEMS - 1) {
                     in_sub_menu = false;
                     feature_active = false;
                     feature_exit_requested = false;
@@ -3335,7 +3335,12 @@ void handleSubGHzSubmenuButtons() {
         last_interaction_time = millis();
         delay(200);
 
-        if (current_submenu_index == 5) {
+        /* Derived, not written down. This said 5, which was Back until an
+             * entry was added above it; Back then moved to 6 and the literal
+             * pointed at the new feature, so choosing it went to the main menu
+             * and choosing Back fell through to a switch with no case for it
+             * and did nothing. */
+            if (current_submenu_index == subghz_NUM_SUBMENU_ITEMS - 1) {
             in_sub_menu = false;
             feature_active = false;
             feature_exit_requested = false;
@@ -3367,7 +3372,7 @@ void handleSubGHzSubmenuButtons() {
                 displaySubmenu();
                 delay(200);
 
-                if (current_submenu_index == 5) {
+                if (current_submenu_index == subghz_NUM_SUBMENU_ITEMS - 1) {
                     in_sub_menu = false;
                     feature_active = false;
                     feature_exit_requested = false;
