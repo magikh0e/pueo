@@ -162,13 +162,14 @@ All three CC1101 control lines land on P3, which is the one place this board
 is easier than its predecessor: chip select, GDO0 and GDO2 reach a connector
 rather than costing a joint.
 
-Ground on pins 1, 2 and 14 so every signal has a return nearby. On a
-multi-drop SPI bus run through a cable this matters more than the pin count
-suggests.
+Ground on J1 pins 1, 5 and 9: one at each end and one in the middle, so
+every signal has a return nearby and the clocked lines are separated from
+the static ones. On a multi-drop SPI bus run through a cable this matters
+more than the pin count suggests.
 
 ## The GPS series resistor
 
-R1, 1 kΩ, in the GPS TX line before J1 pin 13.
+R1, 1 kΩ, in the GPS TX line before J3 pin 2.
 
 GPIO 1 is UART0's transmit pin. The firmware releases it before the GPS
 feature reads on it (`gpsPortOpen()` in `gps.cpp`), but the console owns it
