@@ -60,4 +60,9 @@ bool on();
  */
 bool refuse(const char* feature);
 
+/* The same refusal, for one action inside a screen that is otherwise
+ * passive. Leaves feature_exit_requested alone, so declining to transmit
+ * does not also close the list the user was reading. */
+bool refuseAction(const char* action);
+
 }  // namespace Stealth

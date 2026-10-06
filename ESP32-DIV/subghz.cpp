@@ -551,9 +551,14 @@ static bool cc1101Present() {
 }
 
 /* Probe, and if nothing answers say so and ask to leave. Returns false when
- * the caller must abort -- and sets feature_exit_requested, so the dispatch
+ * the caller must abort, and sets feature_exit_requested so the dispatch
  * loop in ESP32-DIV.ino unwinds the feature the same way a normal exit does. */
 static bool cc1101Ready(const char* feature);
+
+/* The same probe and the same message, without the leaving. For a screen
+ * that needs the radio for one of the things it does rather than for all of
+ * them. Returns false when the action must not run. */
+static bool cc1101ReadyForAction(const char* action);
 
 /* Draw the "no radio" screen and wait for the user to leave. Returns when
  * they do; the caller must then exit the feature. */
@@ -567,16 +572,14 @@ static void cc1101ReportMissing(const char* feature) {
   showNotification("No CC1101", msg);
 }
 
-static bool cc1101Ready(const char* feature) {
+static bool cc1101ReadyForAction(const char* action) {
   if (cc1101Present()) {
     return true;
   }
-  cc1101ReportMissing(feature);
+  cc1101ReportMissing(action);
 
-  /* Modal, deliberately. Setting the exit flag and returning would drop
-   * straight back to the submenu, and the message would be on screen for
-   * one frame -- which reads as the feature refusing to open for no reason,
-   * which is what the freeze looked like too. */
+  /* Modal, deliberately. Drawing the message and returning would put it on
+   * screen for one frame, which reads as the device ignoring the press. */
   delay(250);
   for (;;) {
     int x, y;
@@ -589,7 +592,15 @@ static bool cc1101Ready(const char* feature) {
   while (isButtonPressed(BTN_SELECT) || isButtonPressed(BTN_LEFT)) {
     delay(10);
   }
+  return false;
+}
 
+/* A feature that cannot do anything without the radio asks for it here, and
+ * leaves when it is not there. */
+static bool cc1101Ready(const char* feature) {
+  if (cc1101ReadyForAction(feature)) {
+    return true;
+  }
   feature_exit_requested = true;
   return false;
 }
@@ -2187,6 +2198,19 @@ void updateDisplay() {
 
 void transmitProfile(int index) {
     (void)index;
+
+    /* Both gates live here rather than on the screen, because this is the
+     * only thing in Saved Profile that drives the radio. Each returns to
+     * the list rather than closing it. */
+    if (Stealth::refuseAction("Sending a saved profile")) {
+        profileRestoreChrome();
+        return;
+    }
+    if (!cc1101ReadyForAction("Sending a profile")) {
+        profileRestoreChrome();
+        return;
+    }
+
     String err;
     loadSelectedFromSd(&err);
     if (!selectedValid) return;
@@ -2389,18 +2413,29 @@ void runUI() {
 }
 
 void saveSetup() {
-  if (Stealth::refuse("Saved Profile")) return;
-
-  if (!cc1101Ready("Saved Profiles")) return;
+    /* No gate on the screen. It lists profiles off the card, shows one and
+     * deletes one, none of which touches the radio, and transmitProfile()
+     * refuses on its own behalf. Gating here meant a profile imported from
+     * a .sub file could not be read back on a board with no module fitted. */
     Serial.begin(115200);
     setTouchButtonInputEnabled(true);
     subghzSetProfileNavLabels();
 
-    // No reclaim on this path: before arbitration the CC1101 inherited
-    // whatever clock the last feature left on the bus.
-    SpiBus::claim(SpiBus::Dev::Cc1101);
-    ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
-    ELECHOUSE_cc1101.setGDO(CC1101_GDO0, CC1101_GDO2);
+    /* Brought up only when it is both fitted and allowed. Under Stealth
+     * Mode nothing here may transmit, so the part stays unpowered rather
+     * than sitting in RX for a screen that is only going to read the card.
+     * cc1101Present() hands the bus back to the touch controller when
+     * nothing answers, so the false path leaves SPI where SD wants it. */
+    const bool radioUp = !Stealth::on() && cc1101Present();
+
+    if (radioUp) {
+      // No reclaim on this path: before arbitration the CC1101 inherited
+      // whatever clock the last feature left on the bus.
+      SpiBus::claim(SpiBus::Dev::Cc1101);
+      ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI,
+                                 CC1101_CS);
+      ELECHOUSE_cc1101.setGDO(CC1101_GDO0, CC1101_GDO2);
+    }
 
     EEPROM.begin(EEPROM_SIZE);
     loadProfileCount();
@@ -2424,15 +2459,17 @@ void saveSetup() {
     subghzRedrawNavChrome();
     uiDrawn = false;
 
-    ELECHOUSE_cc1101.Init();
-    ELECHOUSE_cc1101.setCCMode(0);
-    ELECHOUSE_cc1101.setModulation(2);
-    pinMode(SUBGHZ_RX_PIN, INPUT);
-    pinMode(SUBGHZ_TX_PIN, INPUT);
-    ELECHOUSE_cc1101.SetRx();
+    if (radioUp) {
+      ELECHOUSE_cc1101.Init();
+      ELECHOUSE_cc1101.setCCMode(0);
+      ELECHOUSE_cc1101.setModulation(2);
+      pinMode(SUBGHZ_RX_PIN, INPUT);
+      pinMode(SUBGHZ_TX_PIN, INPUT);
+      ELECHOUSE_cc1101.SetRx();
 
-    mySwitch.enableReceive(SUBGHZ_RX_PIN);
-    mySwitch.setRepeatTransmit(8);
+      mySwitch.enableReceive(SUBGHZ_RX_PIN);
+      mySwitch.setRepeatTransmit(8);
+    }
 
     refreshSdIndex(false);
     cacheDirty = true;

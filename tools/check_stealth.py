@@ -105,9 +105,16 @@ def enclosing_namespace(src, at):
     return stack[-1][1] if stack else None
 
 
-# The transmitters, by the setup() both dispatch chains call and the label
-# the refusal screen shows. The label is checked too: a screen that names
-# some other feature is a screen nobody believes.
+# The transmitters, by the function that must refuse and the label the
+# refusal screen shows. The label is checked too: a screen that names some
+# other feature is a screen nobody believes.
+#
+# Usually that function is the setup() both dispatch chains call, because
+# usually the whole feature transmits. Where only part of it does, a fourth
+# column names the words the refusal shows instead, and the signature is the
+# function those words belong to. The third column stays the menu name
+# either way: check_docs() reads this table against the user guide, and the
+# guide lists what the feature is called, not what the screen says.
 TRANSMITTERS = [
     ("wifi.cpp",      "void beaconSpamSetup()",        "Beacon Spammer"),
     ("wifi.cpp",      "void deautherSetup()",          "WiFi Deauther"),
@@ -132,7 +139,12 @@ TRANSMITTERS = [
     ("subghz.cpp",    "void ReplayAttackSetup()",      "Replay Attack"),
     ("subghz.cpp",    "void subjammerSetup()",         "SubGHz Jammer"),
     ("subghz.cpp",    "void subBruteSetup()",          "De Bruijn / Brute"),
-    ("subghz.cpp",    "void saveSetup()",              "Saved Profile"),
+    # Gated on the send, not on the screen. Saved Profile lists records off
+    # the card, shows one and deletes one, none of which touches the radio,
+    # so gating saveSetup() meant a profile imported from a .sub file could
+    # not be read back on a board with no CC1101 fitted.
+    ("subghz.cpp",    "void transmitProfile(",         "Saved Profile",
+     "Sending a saved profile"),
     # Not a setup() and not an attack. Web OTA joins an access point and
     # serves HTTP over it, so it belongs here; the gate sits on it rather
     # than on the Firmware Update screen because the SD path beside it
@@ -162,14 +174,17 @@ TX_NAMESPACES = {
 
 def main():
     print("every feature whose job is to transmit refuses first:")
-    for fname, sig, label in TRANSMITTERS:
+    for row in TRANSMITTERS:
+        fname, sig, label = row[0], row[1], row[2]
+        # The words the refusal shows, where they are not the menu name.
+        shown = row[3] if len(row) > 3 else label
         body = func_body(read(fname), sig)
         ok("%-22s (%s)" % (label, fname),
            bool(body) and "Stealth::refuse" in body,
            "no body found for %r" % sig if not body
            else "starts transmitting with Stealth Mode on")
         ok("  and names itself",
-           bool(body) and ('"%s"' % label) in body,
+           bool(body) and ('"%s"' % shown) in body,
            "the refusal screen names some other feature")
 
     print("\nthe transmit paths with no menu entry gate themselves:")
@@ -247,6 +262,17 @@ def main():
     ok("Settings offers the row",
        '{"Stealth Mode", &AppSettings::stealthMode' in ui)
     st = read("Stealth.cpp")
+    # refuseAction() is refuse() without the leaving, for a screen that is
+    # passive apart from one button. If it ever sets the flag it stops being
+    # that, and the screen it was meant to keep open closes under it.
+    stealth_src = (SKETCH / "Stealth.cpp").read_text(
+        encoding="utf-8", errors="replace")
+    act = func_body(stealth_src, "bool refuseAction(")
+    ok("refuseAction() refuses without closing the screen",
+       bool(act) and "feature_exit_requested" not in act,
+       "no body found for refuseAction()" if not act
+       else "it sets feature_exit_requested, which is what refuse() is for")
+
     ok("refuse() reads the setting and exits the feature",
        "settings().stealthMode" in read("Stealth.cpp") + st
        and "feature_exit_requested = true" in st)

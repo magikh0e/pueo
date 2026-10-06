@@ -8,7 +8,7 @@ namespace Stealth {
 
 bool on() { return settings().stealthMode; }
 
-bool refuse(const char* feature) {
+bool refuseAction(const char* feature) {
   if (!on()) return false;
 
   tft.fillScreen(TFT_BLACK);
@@ -45,6 +45,12 @@ bool refuse(const char* feature) {
     delay(20);
   }
 
+  return true;
+}
+
+/* Refusing a whole feature is refusing its one action and then leaving. */
+bool refuse(const char* feature) {
+  if (!refuseAction(feature)) return false;
   feature_exit_requested = true;
   return true;
 }
