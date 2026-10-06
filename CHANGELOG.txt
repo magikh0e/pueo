@@ -11,6 +11,61 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.38 - 2026-10-05
+-------------------
+
+  Leaving Packet Monitor did not stop it.
+
+  * THE FEATURE RAN ON AFTER THE OPERATOR HAD GONE.
+
+    ptmLoop has two exit branches that clear promiscuous mode and close the
+    capture file. The dispatch reaches neither: its own loop checks the exit
+    button after calling ptmLoop and tears the feature down itself, clearing
+    feature_exit_requested on the way, then breaks. Nothing called pcapStop.
+
+    So leaving the screen left the radio promiscuous with the callback
+    installed and the file open and still being written to, until something
+    else reinitialised WiFi. The file was closed lazily by the next
+    pcapStart, a run later.
+
+    ptmTeardown now clears promiscuous mode, closes the file and resets the
+    ready flag, and the dispatch calls it on both ways out of both of its
+    copies. It is safe to call twice, so the branches inside ptmLoop stay:
+    they are correct and one of them may become reachable again.
+
+  * WHICH IS WHY THE CAPTURE SUMMARY HAD NEVER PRINTED.
+
+    Six runs across three builds, and not once. It was not a lucky miss: the
+    line sat on the two exit branches that nothing reaches, so it was being
+    printed at the start of the following capture, about the previous one,
+    if at all.
+
+    One copy now, in pcapDisableAndCloseFile, which runs exactly once per
+    capture whatever reached it and before pcapStop zeroes the counters. The
+    check asserts where it sits rather than how many copies exist, because
+    counting copies is what passed while the behaviour did not.
+
+  * WHAT IT SAYS, FIRST TIME OUT.
+
+      written=266 dropped=56 keyframes_lost=0
+
+    That is the shape worth reading. Fifty-six ordinary frames the general
+    pool could not hold, on a busy channel, which is expected and was always
+    happening. No key frame lost, because those have eight slots of their own
+    that nothing else can take. The condition that destroyed every handshake
+    before 0.4.37 is still present in the traffic and no longer reaches the
+    frames that matter.
+
+  * tools/check_pcap_pool.py, 21 assertions.
+
+    Three new: that every ptmLoop call site has a matching teardown, that the
+    teardown closes the file, and that it takes the radio out of promiscuous
+    mode. Confirmed by deleting one of the two teardown calls.
+
+  The EAPOL parser, the tracker, the reserve and the on-screen arithmetic are
+  unchanged from 0.4.37.
+
+
 0.4.37 - 2026-10-05
 -------------------
 

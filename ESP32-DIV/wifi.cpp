@@ -198,6 +198,11 @@ static File  pcapFile;
 static String pcapPath;
 static uint32_t pcapPacketsWritten = 0;
 static uint32_t pcapDropped = 0;
+/* Key frames the tracker recognised and the writer did not save. It lives
+ * with the capture counters rather than with the EAPOL ones because the
+ * summary in pcapDisableAndCloseFile reads it, and that function is defined
+ * above where the EAPOL state used to sit. */
+uint32_t s_eapolLost = 0;
 static uint32_t pcapLastFlushMs = 0;
 
 static constexpr uint8_t PCAP_POOL_SIZE = ESP32DIV_PCAP_POOL_SIZE;
@@ -267,9 +272,29 @@ static void pcapDisableAndCloseFile() {
     }
   }
 
+  const bool wasOpen = (bool)pcapFile;
   if (pcapFile) {
     pcapFile.flush();
     pcapFile.close();
+  }
+
+  /* Said here rather than on an exit path. There are two ways out of Packet
+   * Monitor and the summary used to sit on both, and printed on neither:
+   * the sketch's loop checks the exit button after calling ptmLoop and
+   * tears the feature down itself, clearing the flag, so ptmLoop can return
+   * without seeing it. The file closes exactly once per capture whatever
+   * reached it, which makes this the one place that cannot be bypassed.
+   *
+   * keyframes_lost is the number that matters. dropped is ordinary traffic
+   * the pool could not hold, which is expected on a busy channel; a key
+   * frame is the thing the feature exists for and has a reserve of its own,
+   * so anything other than zero there is a fault. */
+  if (wasOpen && (pcapPacketsWritten || pcapDropped)) {
+    Serial.printf("[PCAP] PacketMonitor stopped. written=%lu dropped=%lu "
+                  "keyframes_lost=%lu\n",
+                  (unsigned long)pcapPacketsWritten,
+                  (unsigned long)pcapDropped,
+                  (unsigned long)s_eapolLost);
   }
   pcapPath = "";
 }
@@ -462,10 +487,6 @@ uint32_t deauths = 0;
 portMUX_TYPE s_eapolMux = portMUX_INITIALIZER_UNLOCKED;
 uint32_t s_eapolFrames = 0;
 int      s_eapolUsable = 0;
-/* Key frames the tracker recognised and the writer did not save. The
- * indicator is fed before the queue, so without this the screen reports a
- * handshake that is not in the file. */
-uint32_t s_eapolLost = 0;
 unsigned int ch = 1;
 int rssiSum;
 
@@ -931,6 +952,24 @@ static void ptmDrawWaitCard() {
   tft.setTextColor(UI_TEXT, FEATURE_BG);
 }
 
+/* Called by the sketch on every way out of this feature.
+ *
+ * ptmLoop has two exit branches that do this, and the dispatch reaches
+ * neither: it checks the exit button after calling ptmLoop and tears the
+ * feature down itself, clearing feature_exit_requested before ptmLoop can
+ * see it. So leaving the screen used to leave the radio promiscuous with
+ * the callback installed and the capture file open, still being written to,
+ * and the file was closed lazily by the next pcapStart a run later.
+ *
+ * Safe to call twice: pcapStop is idempotent and clearing promiscuous mode
+ * that is already clear is not an error. That matters because the branches
+ * in ptmLoop are kept. */
+void ptmTeardown() {
+  esp_wifi_set_promiscuous(false);
+  pcapStop();
+  s_ptmHwReady = false;
+}
+
 void ptmSetup() {
   pauseBackgroundRadioTasks();
   setTouchButtonInputEnabled(true);
@@ -1015,11 +1054,6 @@ void ptmLoop() {
   if (feature_active && (isButtonPressed(BTN_SELECT) || featureExitButtonPressed())) {
 
     esp_wifi_set_promiscuous(false);
-    if (pcapPacketsWritten || pcapDropped) {
-      Serial.printf("[PCAP] PacketMonitor stopped. written=%lu dropped=%lu keyframes_lost=%lu\n",
-                    (unsigned long)pcapPacketsWritten, (unsigned long)pcapDropped,
-                    (unsigned long)s_eapolLost);
-    }
     pcapStop();
     feature_exit_requested = true;
     return;
@@ -1028,11 +1062,6 @@ void ptmLoop() {
   runUI();
   if (feature_exit_requested) {
     esp_wifi_set_promiscuous(false);
-    if (pcapPacketsWritten || pcapDropped) {
-      Serial.printf("[PCAP] PacketMonitor stopped. written=%lu dropped=%lu keyframes_lost=%lu\n",
-                    (unsigned long)pcapPacketsWritten, (unsigned long)pcapDropped,
-                    (unsigned long)s_eapolLost);
-    }
     pcapStop();
     return;
   }

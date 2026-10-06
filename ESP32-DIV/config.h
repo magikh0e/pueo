@@ -152,6 +152,10 @@ namespace jammingdetector {
 namespace PacketMonitor {
   void ptmSetup();
   void ptmLoop();
+  /* Called on every way out. The dispatch does not reach ptmLoop's own
+   * exit branches, so without this the radio stays promiscuous and the
+   * capture file stays open and being written to after you leave. */
+  void ptmTeardown();
 }
 namespace BeaconSpammer {
   void beaconSpamSetup();

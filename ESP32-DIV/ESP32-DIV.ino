@@ -1573,6 +1573,10 @@ void handleWiFiSubmenuButtons() {
                     break;
                 }
             }
+            /* Leaving the screen used to leave the radio promiscuous and the
+             * capture file open and still being written. ptmLoop has branches
+             * for this that this loop never lets it reach. */
+            PacketMonitor::ptmTeardown();
             if (feature_exit_requested) {
                 in_sub_menu = true;
                 is_main_menu = false;
@@ -2016,6 +2020,10 @@ void handleWiFiSubmenuButtons() {
                             break;
                         }
                     }
+                    /* Leaving the screen used to leave the radio promiscuous and the
+                     * capture file open and still being written. ptmLoop has branches
+                     * for this that this loop never lets it reach. */
+                    PacketMonitor::ptmTeardown();
                     if (feature_exit_requested) {
                         in_sub_menu = true;
                         is_main_menu = false;

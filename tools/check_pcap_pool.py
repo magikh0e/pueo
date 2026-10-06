@@ -42,7 +42,12 @@ What it asserts
                   write is the way this comes back, so they are counted
                   rather than inspected by eye.
 
-  the report      The indicator and both serial lines carry the lost count.
+  the report      The indicator carries the lost count, and so does the
+                  one capture summary, which sits in the close rather than
+                  on an exit path. It had a copy on each of the two exits
+                  and printed on neither across six runs: the sketch's loop
+                  checks the exit button itself after calling ptmLoop and
+                  clears the flag, so ptmLoop can return without seeing it.
                   A number nobody prints is a number nobody acts on.
 
   no false cue    The old comment claiming the frames are already in the
@@ -74,6 +79,21 @@ def ok(name, cond, detail=""):
     else:
         FAILED.append(name)
         print("  FAIL  %-46s %s" % (name, detail))
+
+
+def func_body(src, signature):
+    """The body of a definition, brace matched from its opening brace."""
+    i = src.index(signature)
+    j = src.index("{", i)
+    depth = 0
+    for k in range(j, len(src)):
+        if src[k] == "{":
+            depth += 1
+        elif src[k] == "}":
+            depth -= 1
+            if depth == 0:
+                return src[j:k + 1]
+    return ""
 
 
 def callback_body(src):
@@ -149,14 +169,50 @@ def main():
        "s_eapolLost" in wifi.split("tft.print(\"HS \")")[0][-900:],
        "the HS indicator does not read s_eapolLost")
 
-    stop = re.findall(r"PacketMonitor stopped[^\"]*keyframes_lost", wifi)
-    ok("both stop lines report it", len(stop) == 2,
-       "%d of 2 stop lines carry keyframes_lost" % len(stop))
+    stop = re.findall(r"PacketMonitor stopped", wifi)
+    ok("the capture summary exists once", len(stop) == 1,
+       "%d copies of it" % len(stop))
+    ok("  and it carries the lost count",
+       re.search(r"PacketMonitor stopped[^;]*keyframes_lost", wifi,
+                 re.S) is not None,
+       "the summary does not mention keyframes_lost")
+
+    # Where it sits is the assertion, not how many there are. Two copies on
+    # two exit branches printed on neither, because the sketch's own loop
+    # checks the exit button after calling ptmLoop and tears the feature
+    # down itself, clearing the flag before ptmLoop can see it. The file
+    # closes once per capture whatever reached it.
+    close = func_body(wifi, "static void pcapDisableAndCloseFile(")
+    ok("  and sits in the close, which no path can bypass",
+       "PacketMonitor stopped" in close,
+       "the summary is on an exit path instead")
+    ok("  and is read before pcapStop zeroes the counters",
+       wifi.index("static void pcapDisableAndCloseFile(")
+       < wifi.index("static void pcapStop("),
+       "the close runs after the counters are cleared")
 
     ok("the counter resets with the others",
        re.search(r"s_eapolUsable\s*=\s*0;\s*\n\s*s_eapolLost\s*=\s*0;",
                  wifi) is not None,
        "s_eapolLost survives a restart of the feature")
+
+    # Leaving the screen has to stop the feature. ptmLoop has branches for
+    # it and the dispatch reaches neither, so the capture used to run on
+    # after the operator had gone: promiscuous mode still set, the callback
+    # still installed, the file still open and still being written, closed
+    # lazily by the next pcapStart a run later.
+    ino = (ROOT / "ESP32-DIV" / "ESP32-DIV.ino").read_text(
+        encoding="utf-8", errors="replace")
+    loops = ino.count("PacketMonitor::ptmLoop();")
+    downs = ino.count("PacketMonitor::ptmTeardown();")
+    ok("every dispatch copy tears the feature down", downs >= loops,
+       "%d ptmLoop call site(s), %d teardown call(s)" % (loops, downs))
+    td = func_body(wifi, "void ptmTeardown()")
+    ok("  and the teardown closes the file",
+       "pcapStop" in td, "ptmTeardown does not call pcapStop")
+    ok("  and takes the radio out of promiscuous mode",
+       "esp_wifi_set_promiscuous(false)" in td,
+       "ptmTeardown leaves the callback installed")
 
     ok("nothing claims the frames are already saved",
        "already in the pcap" not in wifi,
