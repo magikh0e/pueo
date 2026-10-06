@@ -28,6 +28,7 @@ They are safe because they yield, and that is what this asserts: not the shape
 of the loop, but that it cannot spin.
 """
 import glob
+import io
 import os
 import re
 import sys
@@ -99,6 +100,66 @@ def main():
             problems.append("waitForButtonRelease has no elapsed-time test in "
                             "its own body; a wait that cannot give up is the "
                             "bug it replaced")
+
+    # A feature read only through physical buttons has no input at all on a
+    # board where the PCF8574 is disabled, which it is here:
+    # isPhysicalButtonPressed is then a constant false. Import .sub read only
+    # that for Next, Prev and Import, so the screen drew, scrolled nowhere
+    # and imported nothing, while Exit still worked, because
+    # featureExitButtonPressed falls through to the touch bar. It compiled,
+    # and every other check passed.
+    #
+    # No regex here on purpose: a namespace opener is a startswith and an
+    # endswith, and the touch test is three substrings, so nothing in this
+    # block needs an escape to survive being written.
+    TOUCH = ("isTouchNavButtonPressedEdge", "featureExitButtonPressed",
+             "isButtonPressed(")
+    def strip_comments(text):
+        """Comments out, so a note about touch cannot stand in for the call.
+
+        The first version of this scanned raw text, and the comment above
+        Import .sub's nav handler names featureExitButtonPressed. Deleting
+        the handler left the comment, and the check stayed green on a
+        feature with no working input at all.
+        """
+        out, i, n = [], 0, len(text)
+        while i < n:
+            two = text[i:i + 2]
+            if two == "/*":
+                j = text.find("*/", i + 2)
+                i = n if j < 0 else j + 2
+            elif two == "//":
+                j = text.find(chr(10), i)
+                i = n if j < 0 else j
+            else:
+                out.append(text[i])
+                i += 1
+        return "".join(out)
+
+    for fn in sorted(glob.glob(os.path.join(SKETCH, "*.cpp"))):
+        src2 = strip_comments(
+            io.open(fn, encoding="utf-8", errors="replace").read())
+        lines2 = src2.splitlines()
+        spans, cur, start = [], None, 0
+        for i, ln in enumerate(lines2):
+            t = ln.strip()
+            if t.startswith("namespace ") and t.endswith("{"):
+                if cur:
+                    spans.append((cur, start, i))
+                cur, start = t.split()[1], i
+        if cur:
+            spans.append((cur, start, len(lines2)))
+        for name, a, b in spans:
+            body = "".join(lines2[a:b])
+            if "isPhysicalButtonPressed" not in body:
+                continue
+            if any(t in body for t in TOUCH):
+                continue
+            problems.append(
+                "%s: namespace %s reads physical buttons only, and the "
+                "PCF8574 is disabled on this board, so that is a constant "
+                "false and the feature has no input"
+                % (os.path.basename(fn), name))
 
     if problems:
         for p in problems:

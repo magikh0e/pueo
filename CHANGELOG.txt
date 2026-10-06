@@ -11,6 +11,84 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.41 - 2026-10-06
+-------------------
+
+  Reading a Flipper .sub in, and two menu bugs found while testing it.
+
+  * SUBGHZ > IMPORT .SUB.
+
+    SubFile could parse a .sub from the day it was written, with 60,891
+    assertions behind it, and nothing called it. The blockers were a profile
+    record declared three times, so an import had no single type to write
+    through, and a saveProfile that could not store anything without also
+    prompting and drawing.
+
+    The screen lists .sub files in /pueo/subghz and imports the selected one:
+    parse, make room, store, in that order, so the steps that can fail happen
+    before anything is written. It creates the directory if the card has
+    never had one, because that folder only appears once a profile has been
+    exported and the screen was otherwise telling somebody to make a folder
+    it could make itself.
+
+    No Stealth gate: it touches no radio, reads one file and writes one
+    EEPROM record. There is nothing here to refuse.
+
+    The name is the filename without its extension. A .sub carries no name of
+    its own, and prompting would put a keyboard between choosing a file and
+    finding out whether it parses, which is the wrong way round.
+
+    Every failure says which one it was. SubFile::resultText already tells a
+    RAW capture from a missing field from a frequency this radio cannot
+    reach, and those are three different things to do next.
+
+  * WHAT IS VERIFIED, AND WHAT IS NOT.
+
+    On hardware: the menu entry opens, the card mounts over the bus it shares
+    with the CC1101, the directory is created and scanned, and an empty one
+    reports as empty.
+
+    Not yet run on hardware: parse and store. The parser's own transcription
+    reads the sample as 433920000 Hz, value 0x123456, 24 bits, Princeton as
+    rc-switch protocol 1, so importing it should produce exactly that.
+
+  * ONE PROFILE RECORD, BECAUSE THERE WERE THREE.
+
+    SubGhzProfile at file scope and Profile declared again in replayat and in
+    SavedProfile, all describing the same twenty-eight bytes of EEPROM. The
+    export path used one, saveProfile another, the browser the third, and
+    nothing kept them in step. They agreed, which is the only reason records
+    written by one were readable by the others.
+
+    PROFILE_SIZE was doubled the same way, a constexpr and two macros, each
+    shadowing it from its own namespace on.
+
+    tools/check_profile_record.py, 12 assertions, including the field order
+    and widths: EEPROM holds records written by earlier firmware, so changing
+    that is changing a file format.
+
+  * NO SUBMENU WRITES DOWN WHICH ENTRY IS BACK.
+
+    Adding the import broke two things from one constant. The handler
+    compared against the literal 5, which was Back until the new entry took
+    that index. Choosing the import went to the main menu, because it took
+    the branch meant for Back; choosing Back did nothing, because it fell
+    through to a switch with no case for 6.
+
+    It compiled and every check passed, including the one for menu tables.
+    The tables were right. The index was written down in a third place that
+    nothing looked at.
+
+    Both SubGHz branches derive it now, and so do NRF24's two, which were
+    correct for seven entries and primed to break identically. An assertion
+    in check_menu_tables.py names the function, line and number.
+
+    Found by running it. There is no wrong output to notice here, only one
+    entry doing the wrong thing and another doing nothing.
+
+  Fifty-five check scripts.
+
+
 0.4.40 - 2026-10-06
 -------------------
 

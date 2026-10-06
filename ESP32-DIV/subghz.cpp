@@ -4110,6 +4110,43 @@ static void draw() {
   tft.print(s_status);
 }
 
+/* The touch nav bar, which on this board is the only input there is.
+ *
+ * The first version read isPhysicalButtonPressed only, and the PCF8574
+ * buttons are disabled here, so Next, Prev and Import did nothing while
+ * Exit still worked: Exit goes through featureExitButtonPressed, which
+ * falls through to the touch bar, and nothing else did.
+ *
+ * Edge-triggered, with a release wait, the way Saved Profile does it. A
+ * level read would repeat for as long as a finger rests on the bar. */
+static void handleNavButtons() {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+    feature_exit_requested = true;
+    return;
+  }
+  if (s_files.empty()) {
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_UP)) {
+    s_sel = (s_sel - 1 + (int)s_files.size()) % (int)s_files.size();
+    s_needRedraw = true;
+    subghzWaitNavRelease(BTN_UP);
+  }
+  if (isTouchNavButtonPressedEdge(BTN_DOWN)) {
+    s_sel = (s_sel + 1) % (int)s_files.size();
+    s_needRedraw = true;
+    subghzWaitNavRelease(BTN_DOWN);
+  }
+  if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
+    importSelected();
+    s_needRedraw = true;
+    subghzWaitNavRelease(BTN_RIGHT);
+  }
+}
+
 void setup() {
   setTouchButtonInputEnabled(true);
   setTouchNavLabels("", "Next", "Exit", "Prev", "Import");
@@ -4137,6 +4174,7 @@ void loop() {
 
   maintainTouchNavBar();
   replayat::runUI();
+  handleNavButtons();
 
   static unsigned long lastMs = 0;
   const unsigned long debounce = 200;
