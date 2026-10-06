@@ -14,7 +14,8 @@ this file.
 0.4.41 - 2026-10-06
 -------------------
 
-  Reading a Flipper .sub in, and two menu bugs found while testing it.
+  Reading a Flipper .sub in, two menu bugs found while testing it, and a
+  screen that would not open to show the result.
 
   * SUBGHZ > IMPORT .SUB.
 
@@ -42,15 +43,59 @@ this file.
     RAW capture from a missing field from a frequency this radio cannot
     reach, and those are three different things to do next.
 
+  * THE SCREEN READS THE TOUCH BAR, BECAUSE THAT IS THE ONLY INPUT HERE.
+
+    Next, Prev and Import were wired to isPhysicalButtonPressed, which is a
+    constant false on a board with no PCF8574, which this is. Exit worked,
+    because featureExitButtonPressed falls through to the touch bar, so the
+    screen drew, scrolled nowhere and imported nothing while still being
+    possible to leave. It compiled and every check passed.
+
+    check_button_waits.py now refuses a namespace that reads physical
+    buttons and nothing else. It scans with comments stripped: the first
+    version passed on the text of a comment naming the touch calls, which
+    was found by deleting the handler and watching the check stay green.
+
+  * GATED ON THE SEND, NOT ON THE SCREEN.
+
+    Saved Profile refused to open without a CC1101, and under Stealth Mode.
+    It lists records off the card, shows one and deletes one, and only Send
+    drives the radio. So a profile imported from a .sub could not be read
+    back on a board with no module fitted, which is how this was found.
+
+    Both refusals moved into transmitProfile(). Stealth::refuseAction() and
+    cc1101ReadyForAction() are the existing refusals without the leaving, so
+    declining to transmit no longer closes the list behind it. The radio is
+    brought up at setup only when it is both fitted and allowed, rather than
+    sitting in RX for a screen that is going to read the card.
+
+    The Stealth refusal also said "Saved Profile transmits, so it is switched
+    off" about a screen that was about to do no such thing.
+
+    check_stealth.py carries a column for where the gate lives, so a gate
+    that moves still reads as present and a gate that goes does not. Both
+    new assertions were confirmed load bearing by breaking them.
+
   * WHAT IS VERIFIED, AND WHAT IS NOT.
 
-    On hardware: the menu entry opens, the card mounts over the bus it shares
-    with the CC1101, the directory is created and scanned, and an empty one
-    reports as empty.
+    On hardware, end to end: the menu entry opens, the card mounts over the
+    bus it shares with the CC1101, the directory is created and scanned, an
+    empty one reports as empty, a .sub parses and stores against a reported
+    slot, and Saved Profile reads the record back as 433.92 MHz, 24 bits,
+    0x123456. That is what the parser's own transcription says the sample
+    is, which is the thing worth checking: the C++ parser and the Python
+    transcription that 60,891 assertions are written against now agree on a
+    real file on a real board, rather than only on each other.
 
-    Not yet run on hardware: parse and store. The parser's own transcription
-    reads the sample as 433920000 Hz, value 0x123456, 24 bits, Princeton as
-    rc-switch protocol 1, so importing it should produce exactly that.
+    Read back with no CC1101 fitted, which the screen would not have allowed
+    before this release.
+
+    The record also carries Princeton as rc-switch protocol 1, which the
+    screen shows and the card confirms. storeProfile() syncs the table to
+    /pueo/subghz/profiles_current.bin on every write, and
+    tools/decode_profiles.py reads that file against the record layout and
+    against the parser's own frequency and bit bounds, so the stored bytes
+    can be checked off the card without the device.
 
   * ONE PROFILE RECORD, BECAUSE THERE WERE THREE.
 
