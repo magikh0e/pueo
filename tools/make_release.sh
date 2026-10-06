@@ -153,6 +153,7 @@ INCLUDE=(
   "tools/fixtures/manifest.json"
   "tools/fixtures/ptm-mixed-no-eapol.pcap"
   "tools/anonymise_capture.py"
+  "tools/trim_capture.py"
   "tools/check_airtag_parse.py"
   "tools/check_sub_parse.py"
   "tools/check_fastpair.py"
