@@ -332,7 +332,7 @@ static void bleSetJammerNavLabels(bool running) {
 }
 
 static void bleSetScannerNavLabels() {
-  setTouchNavLabels("Cal", "Scan", "Exit", nullptr, nullptr);
+  setTouchNavLabels("Cal", "Scan", "Exit", nullptr, "Fall");
 }
 
 static void bleSetEsbNavLabels() {
@@ -5146,6 +5146,18 @@ void Print(String text, uint16_t color, bool extraSpace = false) {
   }
 }
 
+/* ── waterfall ──────────────────────────────────────────────────────────
+ *
+ * Time across, channel down, one column per sweep. The spectrum plot says
+ * where energy is; this says how it moves, which is what tells a hopper
+ * from a carrier.
+ *
+ * No history is kept. 128 channels times the plot height is kilobytes
+ * however it is packed, and there is no DRAM for it on this part, so the
+ * drawn pixels are the only record and leaving the screen loses them. */
+static bool s_waterfall = false;
+static int  s_fallCol   = 0;      // next column, relative to the plot left
+
 static unsigned long s_scannerLastBtnMs = 0;
 static constexpr unsigned long kScannerNavDebounceMs = 80;
 
@@ -5161,6 +5173,10 @@ static void scannerWaitNavRelease(int pin) {
   }
   delay(30);
 }
+
+static void scannerDrawFallChrome();
+static void scannerDrawGraphChrome();
+static void scannerResetGraphState();
 
 void scannerHandleNavButtons() {
   if (!featureHasTouchNavBar()) {
@@ -5181,6 +5197,21 @@ void scannerHandleNavButtons() {
     scan();
     s_scannerLastBtnMs = millis();
     scannerWaitNavRelease(BTN_DOWN);
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
+    /* Swapping the view redraws the frame, which is also what clears the
+     * other one's pixels. With no history buffer a switch is necessarily a
+     * fresh start, so there is nothing to preserve across it. */
+    s_waterfall = !s_waterfall;
+    if (s_waterfall) {
+      scannerDrawFallChrome();
+    } else {
+      scannerResetGraphState();
+      scannerDrawGraphChrome();
+    }
+    s_scannerLastBtnMs = millis();
+    scannerWaitNavRelease(BTN_RIGHT);
   }
 }
 
@@ -5441,6 +5472,59 @@ struct ScannerPlotLayout {
 static ScannerPlotLayout s_plot;
 static uint8_t s_smoothValues[N];
 static uint8_t s_prevBarPx[N];
+
+/* Hit count to colour. Black at nothing, through blue and green to red,
+ * which is the convention every spectrum display uses and therefore the
+ * one that needs no legend. */
+static uint16_t scannerFallColour(uint8_t v, uint8_t maxV) {
+  if (v == 0) return TFT_BLACK;
+  const uint16_t top = maxV ? maxV : 1;
+  const int q = (int)v * 255 / top;          // 1..255
+  if (q < 64)  return tft.color565(0, 0, 64 + q * 2);          // blue
+  if (q < 128) return tft.color565(0, (q - 64) * 4, 255 - (q - 64) * 2);
+  if (q < 192) return tft.color565((q - 128) * 4, 255, 0);     // green
+  return tft.color565(255, 255 - (q - 192) * 4, 0);            // red
+}
+
+static void scannerDrawFallChrome();
+
+static void scannerUpdateFall(const uint8_t* vals, int n) {
+  if (!s_plot.valid || n <= 0) return;
+
+  const int x = s_plot.axisX + 1 + s_fallCol;
+  if (x >= s_plot.plotRight) {
+    s_fallCol = 0;
+    return;
+  }
+
+  uint8_t maxV = 0;
+  for (int i = 0; i < n; i++) {
+    if (vals[i] > maxV) maxV = vals[i];
+  }
+
+  /* One vertical line per sweep. Each channel owns a band of rows, so a
+   * plot taller than the channel count has no gaps in it. */
+  const int h = s_plot.plotHeight - 2;
+  for (int row = 0; row < h; row++) {
+    const int ch = (row * n) / h;
+    tft.drawPixel(x, s_plot.plotTop + 1 + row,
+                  scannerFallColour(vals[ch], maxV));
+  }
+
+  /* A cursor one column ahead, so it is obvious which way time runs and
+   * where the oldest data is once it has wrapped. */
+  if (x + 1 < s_plot.plotRight) {
+    tft.drawFastVLine(x + 1, s_plot.plotTop + 1, h, UI_LINE);
+  }
+
+  s_fallCol++;
+}
+
+static void scannerResetFall() {
+  s_fallCol = 0;
+}
+
+
 static bool s_graphChromeDrawn = false;
 static int s_lastPeakCh = -1;
 static uint8_t s_lastPeakVal = 0;
@@ -5540,6 +5624,40 @@ static void scannerEnsurePlotLayout() {
   s_plot.plotWidth = s_plot.plotRight - s_plot.axisX;
   s_plot.maxBarHeight = s_plot.plotHeight;
   s_plot.valid = s_plot.plotWidth >= 32 && s_plot.plotHeight >= 10;
+}
+
+/* The waterfall's own frame and labels. Channel runs down the left rather
+ * than frequency along the bottom, because the axes have swapped. */
+static void scannerDrawFallChrome() {
+  scannerEnsurePlotLayout();
+  if (!s_plot.valid) {
+    return;
+  }
+
+  const int screenW = tft.width();
+  const int graphBottom = bleContentBottom() - 2;
+  tft.fillRect(0, kScannerLogBottom, screenW,
+               graphBottom - kScannerLogBottom + 2, TFT_BLACK);
+  tft.fillRect(s_plot.axisX, s_plot.plotTop, s_plot.plotWidth,
+               s_plot.plotHeight, TFT_BLACK);
+  tft.drawRect(s_plot.axisX, s_plot.plotTop, s_plot.plotWidth,
+               s_plot.plotHeight, UI_LINE);
+
+  tft.setTextSize(1);
+  tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+  tft.drawString("2.4 GHz Waterfall", (screenW - 100) / 2,
+                 s_plot.graphTop + 2);
+
+  /* Time runs left to right and the band runs top to bottom, so say so
+   * once rather than labelling every row. */
+  const int labelY = s_plot.plotBottom + 2;
+  tft.drawString("2.40", s_plot.axisX + 2, labelY);
+  tft.drawString("time", s_plot.axisX + s_plot.plotWidth / 2 - 10, labelY);
+  char hi[8];
+  snprintf(hi, sizeof(hi), "2.%02u", (unsigned)((2400 + N - 1) % 100));
+  tft.drawString(hi, s_plot.plotRight - 24, labelY);
+
+  scannerResetFall();
 }
 
 static void scannerDrawGraphChrome() {
@@ -5868,8 +5986,14 @@ void display() {
   }
 
   scannerSmoothFrame(frameHits, N);
-  scannerUpdateBars(s_smoothValues, N);
-  scannerUpdatePeakMarker(s_smoothValues, N);
+  /* One sweep, two possible renderers. They read the same array, so the
+   * views cannot disagree about what was measured. */
+  if (s_waterfall) {
+    scannerUpdateFall(s_smoothValues, N);
+  } else {
+    scannerUpdateBars(s_smoothValues, N);
+    scannerUpdatePeakMarker(s_smoothValues, N);
+  }
   scannerUpdateStatusPanel(s_smoothValues, N);
 }
 
@@ -5887,6 +6011,8 @@ void scannerSetup() {
   redrawTouchButtonBar();
 
   uiDrawn = false;
+  s_waterfall = false;
+  scannerResetFall();
   scannerResetGraphState();
   scannerDrawGraphChrome();
 

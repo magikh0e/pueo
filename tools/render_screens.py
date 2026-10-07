@@ -1296,6 +1296,85 @@ def render_freqscan(t):
 
 
 
+
+# ── NRF24 scanner waterfall ──────────────────────────────────────────────
+#
+# Scanner::scannerUpdateFall in bluetooth.cpp. Time across, channel down,
+# one column per sweep, no history kept on the device.
+
+FALL_CHANS = 128
+
+
+def _fall_colour(v, max_v):
+    """scannerFallColour: black, blue, green, red."""
+    if v <= 0:
+        return (0, 0, 0)
+    top = max_v if max_v else 1
+    q = int(v) * 255 // top
+    if q < 64:
+        return (0, 0, 64 + q * 2)
+    if q < 128:
+        return (0, (q - 64) * 4, 255 - (q - 64) * 2)
+    if q < 192:
+        return ((q - 128) * 4, 255, 0)
+    return (255, max(0, 255 - (q - 192) * 4), 0)
+
+
+def _fall_traffic(col, ch):
+    """Synthetic but shaped: a WiFi block, BLE advertising, and a hopper."""
+    v = 0
+    # WiFi channel 6: 2437 MHz, about 20 MHz wide, always there.
+    if 27 <= ch <= 47:
+        edge = min(ch - 27, 47 - ch)
+        v = max(v, 6 + edge)
+    # BLE advertising: three fixed channels, bursty.
+    if ch in (2, 26, 80) and (col * 7 + ch) % 5 < 2:
+        v = max(v, 14)
+    # A hopper walking one channel per sweep.
+    if ch == (col * 3) % FALL_CHANS:
+        v = max(v, 12)
+    # Floor noise, so black is rare and the palette is doing work.
+    if (col * 31 + ch * 17) % 23 == 0:
+        v = max(v, 1)
+    return v
+
+
+def render_nrf_fall(t):
+    """The scanner's waterfall view."""
+    t.fill_screen(BLACK)
+    status_bar(t)
+
+    # Geometry mirrors scannerEnsurePlotLayout closely enough to judge it:
+    # a log area at the top, then the plot with a one-pixel frame.
+    graph_top = 150
+    axis_x = 10
+    plot_top = graph_top + 14
+    plot_w = W - axis_x - 10
+    plot_h = H - plot_top - 40
+
+    body(t, 8, 26, "[+] Scanner ready", UI_ICON, BLACK)
+    body(t, 8, 40, "Peak: Ch37  2.437GHz", UI_LABLE, BLACK)
+    body(t, 8, 54, "Active: 31 channel(s)", UI_LABLE, BLACK)
+
+    t.draw_rect(axis_x, plot_top, plot_w, plot_h, UI_LINE)
+    body(t, (W - 100) // 2, graph_top + 2, "2.4 GHz Waterfall", UI_LABLE, BLACK)
+
+    inner_h = plot_h - 2
+    cols = plot_w - 2
+    for c in range(cols):
+        vals = [_fall_traffic(c, ch) for ch in range(FALL_CHANS)]
+        mx = max(vals)
+        for row in range(inner_h):
+            ch = (row * FALL_CHANS) // inner_h
+            t.im.putpixel((axis_x + 1 + c, plot_top + 1 + row),
+                          _fall_colour(vals[ch], mx))
+
+    label_y = plot_top + plot_h + 2
+    body(t, axis_x + 2, label_y, "2.40", UI_LABLE, BLACK)
+    body(t, axis_x + plot_w // 2 - 10, label_y, "time", UI_LABLE, BLACK)
+    body(t, axis_x + plot_w - 24, label_y, "2.52", UI_LABLE, BLACK)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(REPO, "render"))
@@ -1335,6 +1414,7 @@ def main():
                      ("hunt-gauge", render_hunt_gauge),
                      ("fastpair", render_fastpair),
                      ("freqscan", render_freqscan),
+                     ("nrf-fall", render_nrf_fall),
                      ("hunt-mark",
                       lambda t: render_mark(t, "bitmap_pueo_hunt", "Hunt")),
                      ("spotter-mark",
