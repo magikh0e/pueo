@@ -1204,6 +1204,98 @@ def render_fastpair(t):
         body(t, 8, y + BODY_LINE3, d["line3"], DARKGREY, bg)
 
 
+
+# ── Freq Analyser ────────────────────────────────────────────────────────
+#
+# FreqScan in subghz.cpp. The twelve entries of subghz_frequency_list, one
+# row each, a bar scaled between kRssiFloor and kRssiCeil, and the held peak
+# marked with a bright tick at its own width.
+#
+# The readings are a plausible sample, not a capture: a fob keyed at 433.92
+# with the band otherwise near the floor, because that is the case the
+# screen exists for and the one worth being able to recognise.
+
+# subghz_frequency_list, all eighteen of it and in its order. An earlier
+# version of this listed twelve, five of which are not in the array, which
+# is what comes of transcribing a wrapped slice of a C file.
+FREQSCAN_HZ = [
+    300000000, 303875000, 304250000, 310000000, 314000000, 315000000,
+    318000000, 390000000, 418000000, 433075000, 433420000, 433920000,
+    434420000, 434775000, 438900000, 868350000, 915000000, 925000000,
+]
+# A fob keyed at 433.92 with the band otherwise near the floor, which is the
+# case the screen exists for and the one worth recognising at a glance.
+FREQSCAN_PEAK = [
+    -108, -110, -106, -109, -110, -104,
+    -110, -107, -110, -96, -88, -41,
+    -73, -109, -110, -102, -110, -108,
+]
+FREQSCAN_FLOOR = -110
+FREQSCAN_CEIL = -20
+# rowHeight() in subghz.cpp: derived from the space and the number of rows,
+# clamped. Written down here it would drift from the screen it depicts.
+FREQSCAN_ROW_MIN = 13
+FREQSCAN_ROW_MAX = 24
+
+
+def render_freqscan(t):
+    """FreqScan::draw() in subghz.cpp."""
+    t.fill_screen(BLACK)
+    status_bar(t)
+
+    top = 30
+    # Drawn without the touch nav bar, as every screen here is, so the
+    # content runs to the panel edge and contentBottom() is the height.
+    bottom = H
+    label_x = 6
+    bar_x = 62
+    dbm_x = W - 40
+    full_w = dbm_x - bar_x - 8
+
+    body(t, 6, top - 12, "Freq Analyser", UI_TEXT, BLACK)
+    body(t, 150, top - 12, "peak hold, dBm", UI_LABLE, BLACK)
+
+    avail = bottom - top - 14
+    row_h = max(FREQSCAN_ROW_MIN,
+                min(FREQSCAN_ROW_MAX, avail // len(FREQSCAN_HZ)))
+
+    strongest = max(range(len(FREQSCAN_PEAK)), key=lambda i: FREQSCAN_PEAK[i])
+
+    last_y = top
+    for i, hz in enumerate(FREQSCAN_HZ):
+        y = top + i * row_h
+        if y + row_h > bottom:
+            break
+        last_y = y + row_h
+        peak = FREQSCAN_PEAK[i]
+        best = (i == strongest) and peak > FREQSCAN_FLOOR
+
+        bar_y = y + (row_h - 8) // 2
+
+        body(t, label_x, bar_y, "%7.2f" % (hz / 1e6),
+             UI_ICON if best else UI_LABLE, BLACK)
+
+        if peak <= FREQSCAN_FLOOR:
+            w = 0
+        elif peak >= FREQSCAN_CEIL:
+            w = full_w
+        else:
+            w = ((peak - FREQSCAN_FLOOR) * full_w) // (FREQSCAN_CEIL - FREQSCAN_FLOOR)
+
+        if w > 0:
+            t.fill_rect(bar_x, bar_y, w, 8, UI_ICON if best else UI_LABLE)
+            # UI_WARN resolves to UI_ICON here, which would make the tick
+            # the same colour as the bar it marks.
+            t.fill_rect(bar_x + w - 1, bar_y - 1, 1, 10, RED)
+
+        body(t, dbm_x, bar_y, "%4d" % peak, UI_LABLE, BLACK)
+
+    body(t, 6, last_y + 3,
+         "strongest %.2f MHz" % (FREQSCAN_HZ[strongest] / 1e6),
+         UI_LABLE, BLACK)
+
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=os.path.join(REPO, "render"))
@@ -1242,6 +1334,7 @@ def main():
                      ("hunt-pick", render_hunt_pick),
                      ("hunt-gauge", render_hunt_gauge),
                      ("fastpair", render_fastpair),
+                     ("freqscan", render_freqscan),
                      ("hunt-mark",
                       lambda t: render_mark(t, "bitmap_pueo_hunt", "Hunt")),
                      ("spotter-mark",

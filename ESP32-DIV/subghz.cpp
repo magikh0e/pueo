@@ -5186,7 +5186,7 @@ namespace FreqScan {
  *
  * The problem this answers: Replay Attack wants a frequency chosen before
  * it will listen, and a remote on the wrong one is indistinguishable from
- * a remote that is not transmitting. Twelve guesses, each ambiguous.
+ * a remote that is not transmitting. Eighteen guesses, each ambiguous.
  *
  * Peak hold is the part that makes it usable. A key fob transmits for
  * perhaps 200 ms; an instantaneous bar chart shows nothing by the time you
@@ -5196,7 +5196,14 @@ namespace FreqScan {
  * Receive only: tune, read RSSI, repeat. Nothing to refuse under Stealth.
  */
 
-constexpr int kRowH       = 13;
+/* Row height is derived, not written down. At a fixed 13 the eighteen
+ * frequencies drew in the top half of the panel and left the rest black,
+ * with the footer stranded at the far edge naming a row 200 px above it.
+ *
+ * kRowMin fits the 8 px bar plus a pixel either side. kRowMax stops a
+ * shorter list from spreading into bars with acres between them. */
+constexpr int kRowMin     = 13;
+constexpr int kRowMax     = 24;
 constexpr int kSettleUs   = 1200;   // after a retune, before the first read
 constexpr int kSamples    = 6;      // per frequency per sweep
 constexpr int kRssiFloor  = -110;   // bar empty at or below
@@ -5258,9 +5265,25 @@ static int barWidthFor(int dbm, int fullW) {
   return ((dbm - kRssiFloor) * fullW) / (kRssiCeil - kRssiFloor);
 }
 
+/* The height each row gets, given the space and how many there are. The
+ * footer takes one row's worth at the end, so it sits under the list rather
+ * than at the bottom of the panel. */
+static int rowHeight() {
+  const int top    = 30 + replayat::yshift;
+  const int bottom = subghzContentBottom();
+  const int avail  = bottom - top - 14;          // 14 leaves the footer room
+  if (avail <= 0) return kRowMin;
+
+  int h = avail / (int)kSubghzFreqCount;
+  if (h < kRowMin) h = kRowMin;
+  if (h > kRowMax) h = kRowMax;
+  return h;
+}
+
 static void draw() {
   const int top    = 30 + replayat::yshift;
   const int bottom = subghzContentBottom();
+  const int rowH   = rowHeight();
 
   if (s_needFull) {
     subghzClearBody(TFT_BLACK);
@@ -5283,37 +5306,46 @@ static void draw() {
   const int dbmX   = PUEO_SCREEN_W - 40;
   const int fullW  = dbmX - barX - 8;
 
+  int lastY = top;
   for (size_t i = 0; i < kSubghzFreqCount; i++) {
-    const int y = top + (int)i * kRowH;
-    if (y + kRowH > bottom) break;
+    const int y = top + (int)i * rowH;
+    if (y + rowH > bottom) break;
+    lastY = y + rowH;
 
     const bool best = ((uint8_t)i == s_strongest) &&
                       (s_peak[i] > kRssiFloor);
 
-    tft.setTextColor(best ? UI_ICON : UI_DIM_TEXT, TFT_BLACK);
-    tft.setCursor(labelX, y + 2);
-    tft.printf("%7.2f", subghz_frequency_list[i] / 1000000.0);
-
+    /* Everything in the row is placed from barY, so the row can be any
+     * height and the text, the bar and the reading stay on one line. */
+    const int barY  = y + (rowH - 8) / 2;
+    const int textY = barY;
     const int wPeak = barWidthFor(s_peak[i], fullW);
+
+    tft.setTextColor(best ? UI_ICON : UI_DIM_TEXT, TFT_BLACK);
+    tft.setCursor(labelX, textY);
+    tft.printf("%7.2f", subghz_frequency_list[i] / 1000000.0);
 
     /* Paint the bar, then black only the part beyond it. Clearing the
      * whole row first and filling it after blinks every bar on every
      * sweep, which at this rate reads as the display being broken. */
     if (wPeak > 0) {
-      tft.fillRect(barX, y + 2, wPeak, 8, best ? UI_ICON : UI_DIM_TEXT);
-      tft.drawFastVLine(barX + wPeak - 1, y + 1, 10, UI_WARN);
+      tft.fillRect(barX, barY, wPeak, 8, best ? UI_ICON : UI_DIM_TEXT);
+      tft.drawFastVLine(barX + wPeak - 1, barY - 1, 10, UI_WARN);
     }
     if (wPeak < fullW) {
-      tft.fillRect(barX + wPeak, y + 1, fullW - wPeak, 10, TFT_BLACK);
+      tft.fillRect(barX + wPeak, barY - 1, fullW - wPeak, 10, TFT_BLACK);
     }
 
     tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
-    tft.setCursor(dbmX, y + 2);
+    tft.setCursor(dbmX, textY);
     tft.printf("%4d", (int)s_peak[i]);
   }
 
+  /* Under the list rather than at the panel's edge: it names the row above
+   * it, and at eighteen rows the bottom of the screen is a long way from
+   * anything it refers to. */
   tft.setTextColor(s_held ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
-  tft.setCursor(6, bottom - 11);
+  tft.setCursor(6, lastY + 3);
   if (s_held) {
     tft.print("HELD                          ");
   } else {

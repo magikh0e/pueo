@@ -67,8 +67,8 @@ this file.
 
     Replay Attack wants a frequency chosen before it will listen, and a
     remote on the wrong one is indistinguishable from a remote that is not
-    transmitting. Twelve entries, twelve ambiguous attempts. This parks on
-    each in turn and reads the CC1101's RSSI.
+    transmitting. Eighteen entries, eighteen ambiguous attempts. This parks
+    on each in turn and reads the CC1101's RSSI.
 
     Peak hold with a slow decay is what makes it usable. A key fob
     transmits for about 200 ms, which an instantaneous bar chart has
