@@ -293,7 +293,7 @@ not the big print.
 **That edge has fifteen pads, not nineteen.** The module is the usual
 WROOM-32 footprint: fifteen down each long edge and eight across the bottom.
 
-**[verify] You may well count fourteen and ten, and that is the same module.**
+**You may well count fourteen and ten, and that is the same module.**
 Counted on the board in hand it reads fourteen down each long edge and ten
 across the bottom. Fourteen plus fourteen plus ten is thirty-eight, and so is
 fifteen plus fifteen plus eight: both are describing the same castellations
@@ -301,9 +301,11 @@ and disagreeing only about who owns the two bottom corners. This guide counts
 a corner pad as the last of its long edge, which is Espressif's own numbering;
 counting it as the end of the bottom row instead gives fourteen and ten.
 
-**It cannot reach the six targets either way.** All six are numbered twelve
-or below, which puts them well up the long edge and nowhere near a corner, so
-the attribution makes no
+**It cannot reach the six targets either way, and that is now measured
+rather than argued.** All six are numbered twelve or below, which puts them
+well up the long edge and nowhere near a corner, and three of them have since
+been beeped out and landed where this table says. So the attribution makes
+no
 difference to anything you are about to solder. It matters only if you count
 first, find fourteen, decide the table below is wrong and renumber from
 scratch. Do not: check a pad against the list by what it is wired to, with a
@@ -457,11 +459,27 @@ slot is the one place on this board where these signals are exposed and
 visible. In SPI mode a microSD's eight contacts carry, in order,
 `DAT2 CD/DAT3 CMD VDD CLK VSS DAT0 DAT1`, and three of those are ours:
 
-| module pad | GPIO | signal | microSD contact |
-|---|---|---|---|
-| 2R | 23 | MOSI | 3, `CMD` |
-| 9R | 18 | SCK | 5, `CLK` |
-| 8R | 19 | MISO | 7, `DAT0` |
+| module pad | GPIO | signal | microSD contact | |
+|---|---|---|---|---|
+| 2R | 23 | MOSI | 3, `CMD` | **measured** |
+| 9R | 18 | SCK | 5, `CLK` | **measured** |
+| 8R | 19 | MISO | 7, `DAT0` | **measured** |
+
+**Measured on 2026-10-06**, board unpowered, by sweeping the slot from each
+pad. All three answered on the contacts above and on no others, neither
+answered to another of the three, and none answered to the shell.
+
+That is worth more than three pads. It means counting down the right edge
+with the antenna up lands on `IO23` at two, `IO19` at eight and `IO18` at
+nine, so the **counting convention is right**, which is what the fourteen
+against fifteen question was really about. It also means the module is on
+the footprint this guide assumes, whatever the shield and the FCC ID
+disagree about.
+
+Three of the six targets are now measured. `11R` and `12R` are on the same
+edge and follow from the same count, which is good reason to expect them and
+not the same thing as having checked. `10L` is on the other edge and shares
+nothing with this test.
 
 **Sweep, do not predict.** Counting contacts in a socket is the same class
 of mistake as counting castellations, so do not find contact 3 and check it:
