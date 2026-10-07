@@ -278,8 +278,20 @@ the bottom, and the antenna is already pointing up.
 Counting castellations is how you break something. Start at the top of the
 right-hand edge with the antenna up and count down.
 
+**[verify] The shield says one thing and the FCC ID says another.** On the
+board in hand the can is marked `ESP-WROOM-32`, and the line below it reads
+`FCC ID: 2BCLP-ESP-32S`. `ESP-32S` is a third-party module on the same 38-pin
+footprint rather than Espressif's own part, which is why everything here
+works and why the counting below is unaffected.
+
+It is worth knowing before you go checking your own: searching that FCC ID
+lands on a different filing from Espressif's, and holding the shield's name
+against an Espressif datasheet invites the conclusion that one of them is
+wrong when both are just describing a shared footprint. Read the FCC line,
+not the big print.
+
 **That edge has fifteen pads, not nineteen.** The module is the usual
-WROOM-32: fifteen down each long edge and eight across the bottom. So the count
+WROOM-32 footprint: fifteen down each long edge and eight across the bottom. So the count
 reaches 15 at the bottom-right corner, **turns it**, and 16 to 19 run leftwards
 along the bottom edge. All six targets are at 15 or below, so none of them is
 around that corner. Three of the pads that end the board are.
