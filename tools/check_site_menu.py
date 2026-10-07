@@ -50,6 +50,12 @@ BLOCKS = {
     "Bluetooth": ["bluetooth_page0_items", "bluetooth_page1_items"],
     "Detect": ["other_submenu_items"],
     "System": ["tools_submenu_items"],
+    # The radio menus were outside this check, and the page went stale in
+    # exactly the gap: three screens were added to SubGHz while the page
+    # kept claiming it listed every entry in the menus.
+    "Sub-GHz: CC1101": ["subghz_submenu_items"],
+    "2.4&nbsp;GHz: NRF24": ["nrf_submenu_items"],
+    "NFC: PN532": ["rfid_submenu_items"],
 }
 
 # Rows that are navigation rather than features.
@@ -96,8 +102,15 @@ def site_page():
 
 def blocks_on_page(html):
     """{heading: text} for each <strong class="term">Heading</strong> block."""
+    # The class used to be [A-Za-z/ -]+, which quietly excluded every
+    # heading with a colon or a digit in it: Sub-GHz: CC1101, 2.4 GHz:
+    # NRF24, NFC: PN532. Those three menus were unreachable here whatever
+    # BLOCKS said, and the page went stale in that gap.
+    #
+    # What separates a heading from an inline term is the newline after the
+    # closing tag, not the spelling, so match on that instead.
     heads = [(m.start(), m.group(1)) for m in
-             re.finditer(r'<strong class="term">([A-Za-z/ -]+)</strong>\s*\n',
+             re.finditer(r'<strong class="term">([^<]+)</strong>\s*\n',
                          html)]
     out = {}
     for i, (pos, name) in enumerate(heads):
