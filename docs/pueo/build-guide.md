@@ -291,7 +291,23 @@ wrong when both are just describing a shared footprint. Read the FCC line,
 not the big print.
 
 **That edge has fifteen pads, not nineteen.** The module is the usual
-WROOM-32 footprint: fifteen down each long edge and eight across the bottom. So the count
+WROOM-32 footprint: fifteen down each long edge and eight across the bottom.
+
+**[verify] You may well count fourteen and ten, and that is the same module.**
+Counted on the board in hand it reads fourteen down each long edge and ten
+across the bottom. Fourteen plus fourteen plus ten is thirty-eight, and so is
+fifteen plus fifteen plus eight: both are describing the same castellations
+and disagreeing only about who owns the two bottom corners. This guide counts
+a corner pad as the last of its long edge, which is Espressif's own numbering;
+counting it as the end of the bottom row instead gives fourteen and ten.
+
+**It cannot reach the six targets either way.** All six are numbered twelve
+or below, which puts them well up the long edge and nowhere near a corner, so
+the attribution makes no
+difference to anything you are about to solder. It matters only if you count
+first, find fourteen, decide the table below is wrong and renumber from
+scratch. Do not: check a pad against the list by what it is wired to, with a
+meter, rather than by its position in a count. So the count
 reaches 15 at the bottom-right corner, **turns it**, and 16 to 19 run leftwards
 along the bottom edge. All six targets are at 15 or below, so none of them is
 around that corner. Three of the pads that end the board are.
