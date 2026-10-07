@@ -110,7 +110,7 @@ the module before you trust the order.
 Flash and boot with nothing attached.
 
 ```bash
-esptool.py --chip esp32 -b 921600 write_flash 0x0 pueo-0.4.42-merged.bin
+esptool.py --chip esp32 -b 921600 write_flash 0x0 pueo-0.4.43-merged.bin
 ```
 
 Display, backlight, touch, the menus and the SD card all work before you have

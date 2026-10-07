@@ -11,6 +11,68 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.43 - 2026-10-06
+-------------------
+
+  A waterfall for the 2.4 GHz scanner. One feature, and it has not run.
+
+  * THE SCANNER MEASURED WELL AND THREW THE SHAPE AWAY.
+
+    It sweeps every channel with the NRF24's carrier detector, fifty passes
+    each, against a calibrated noise floor, which is better measurement than
+    most of what is published for this part. Then it drew a bar per channel.
+
+    A bar chart answers where there is energy. It cannot answer what kind of
+    thing is making it, because what distinguishes things in this band is how
+    they move rather than where they sit: BLE advertising sits on three fixed
+    channels, WiFi is a steady 20 MHz block, a proprietary hopper walks. A
+    snapshot shows none of that and thirty seconds of history shows all of it.
+
+  * TIME ACROSS, CHANNEL DOWN, ONE COLUMN PER SWEEP.
+
+    The obvious layout is the other way up, time scrolling downward, and it is
+    wrong here: scrolling needs a framebuffer to shift or a readback the panel
+    does not offer. Advancing a column costs one vertical line of writes per
+    sweep and needs neither.
+
+    Toggled with Fall, on one of the two nav slots the scanner left empty.
+
+  * NO HISTORY BUFFER. THE SCREEN IS THE BUFFER.
+
+    128 channels times the plot height is kilobytes however it is packed, and
+    there is no DRAM for it: adding one String to a SubGHz screen overflowed
+    dram0_0_seg by 16 bytes in 0.4.42. So the drawn pixels are the only
+    record, and leaving the screen loses the history.
+
+    A real limitation rather than one worked around, and the right trade for a
+    view whose value is in watching it live.
+
+  * ONE SWEEP, TWO RENDERERS.
+
+    display() already produced s_smoothValues once per sweep and handed it to
+    the bars. The waterfall is a second consumer of that same array, so the
+    two views cost one sweep between them and cannot disagree about what was
+    measured.
+
+  * WHAT IS VERIFIED, AND WHAT IS NOT.
+
+    Nothing about this has run. The NRF24 needs three solder joints and the
+    shared SPI bus, and none of that is wired, so no board can open this view.
+
+    What exists instead is a render: tools/render_screens.py draws it in the
+    panel's own fonts at 320 by 480, with synthetic traffic shaped like the
+    real thing. That is on the website, marked as a render rather than a
+    photograph, because the whole argument for the view is that a block, a
+    three-channel burst and a diagonal are tellable apart at this size, and
+    that is a question a picture answers and a description does not.
+
+    The same tool found two defects in the Freq Analyser one release ago, so
+    it is worth more than illustration, but it is not a substitute for the
+    hardware.
+
+  +612 bytes of flash, +8 of RAM. Fifty-five check scripts.
+
+
 0.4.42 - 2026-10-06
 -------------------
 
