@@ -449,8 +449,38 @@ is the bench transmitter rather than Pueo, so it is not what you want here.
 
 **3. The three bus lines, then the SD card.** Solder SCK, MOSI and MISO to
 the ESP32 module's pads (9R, 2R and 8R) identifying each by beeping it
-against the matching microSD slot pin first. Then insert a card and confirm it
-still mounts.
+against the matching microSD slot contact first. Then insert a card and
+confirm it still mounts.
+
+**Which contact matches which pad.** The card shares all three nets, so the
+slot is the one place on this board where these signals are exposed and
+visible. In SPI mode a microSD's eight contacts carry, in order,
+`DAT2 CD/DAT3 CMD VDD CLK VSS DAT0 DAT1`, and three of those are ours:
+
+| module pad | GPIO | signal | microSD contact |
+|---|---|---|---|
+| 2R | 23 | MOSI | 3, `CMD` |
+| 9R | 18 | SCK | 5, `CLK` |
+| 8R | 19 | MISO | 7, `DAT0` |
+
+**Sweep, do not predict.** Counting contacts in a socket is the same class
+of mistake as counting castellations, so do not find contact 3 and check it:
+put one probe on the module pad, sweep the other along the slot, and see
+which contact answers. Then read the three results together. Three pads
+landing on three distinct contacts, in the order above, confirms the pad
+numbering and the slot numbering at once. Any two pads answering on the same
+contact means a probe slipped.
+
+**Before you start.** USB unplugged and no card in the slot: continuity mode
+drives a small current and a powered bus gives readings that mean nothing.
+Then two negative checks, which catch what the positive ones cannot. None of
+the three pads should beep to any other, because they are separate nets, and
+none should beep to the slot's shell, which is ground.
+
+**Mind the probe, not just the reading.** These pads are on 1.27 mm centres.
+`IO5` is the SD chip select and sits directly between `IO18` and `IO17`, so a
+slip there shorts the card's select line to the clock you are trying to
+identify, and you will have broken the slot while testing against it.
 
 Testing the bus with the one device already wired to it isolates your work
 from everything that follows. The card is also the check on the joints
