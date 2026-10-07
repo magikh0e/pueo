@@ -5,12 +5,23 @@
 `build-guide.md`. A picture of a table is a copy of it, and a copy drifts.
 
 It drifted immediately. The first version drew nineteen pads in a straight line
-down the module's right edge, because that is how the table reads. The module
-has fifteen a side and eight across the bottom, so the count turns the
-bottom-right corner at 15 and SD1, SD0 and CLK are on the bottom edge. The six
+down the module's right edge, because that is how the table reads. They are not
+in a line: the edge turns, and SD1, SD0 and CLK are along the bottom. The six
 targets were drawn correctly; three of the five hazards were not, and the
 internal flash pins are the ones a drawing most needs to place right. Nothing
 would have caught it. A photograph of the board did, a release later.
+
+Then it drifted again, over how many pads an edge has. Espressif counts each
+corner with its long edge, giving fifteen and eight; counting the corners with
+the bottom row gives fourteen and ten, which is what somebody looking at the
+board sees and reports. Same thirty-eight pads. The drawing had the first and
+the reader had the second, and a drawing captioned "this is what you see" does
+not get to win that argument, so it draws fourteen and ten now.
+
+The numbers on it still stop at fourteen, because one to fourteen is identical
+under either convention and holds every pad anyone solders to. The bottom row
+is named rather than numbered: that is the part the conventions disagree about
+and the part nobody should touch.
 
     python tools/check_solder_pads.py
 
@@ -132,7 +143,10 @@ def main():
         problems.append("%d numbered pads on the bottom edge, expected none: "
                         "past the corner they are named, not numbered"
                         % n_bottom)
-    for side, want in (("right", 15), ("left", 15), ("bottom", 8)):
+    # Fourteen a side and ten across, which is how they count on the board.
+    # The corner pads are drawn in the bottom row rather than as a fifteenth
+    # on each edge, because that is where somebody counting them puts them.
+    for side, want in (("right", 14), ("left", 14), ("bottom", 10)):
         if geom[side] != want:
             problems.append("%d pads drawn on the %s edge, expected %d"
                             % (geom[side], side, want))
@@ -151,8 +165,8 @@ def main():
 
     solder = sum(1 for _, k in table.values() if k == "solder")
     hazard = sum(1 for _, k in table.values() if k == "hazard")
-    print("  ok    %d pads agree, %d targets and %d hazards, 15 a side and 8 "
-          "across the bottom" % (len(table), solder + 1, hazard))
+    print("  ok    %d pads agree, %d targets and %d hazards, 14 a side and "
+          "10 across the bottom" % (len(table), solder + 1, hazard))
     return 0
 
 
