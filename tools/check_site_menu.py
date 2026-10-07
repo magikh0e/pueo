@@ -35,6 +35,7 @@ in every table, and no documentation should list them.
 """
 import io
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -75,8 +76,27 @@ def ok(name, cond, detail=""):
         FAILED.append(name)
 
 
-def tables():
-    src = INO.read_text(encoding="utf-8", errors="replace")
+def ino_at(version):
+    """ESP32-DIV.ino as of tag v<version>, or None.
+
+    None means "could not ask", not "does not match": no git, no repository,
+    or no such tag. Every one of those is a reason to fall back and say so,
+    never a reason to fail.
+    """
+    if not version:
+        return None
+    try:
+        r = subprocess.run(
+            ["git", "show", "v%s:ESP32-DIV/ESP32-DIV.ino" % version],
+            cwd=str(ROOT), capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0 or not r.stdout:
+        return None
+    return r.stdout
+
+
+def parse_tables(src):
     out = {}
     for name, body in re.findall(
             r"const char \*(\w+)\[\w+\] = \{(.*?)\};", src, re.S):
@@ -84,6 +104,11 @@ def tables():
         b = re.sub(r"//[^\n]*", "", b)
         out[name] = [x for x in re.findall(r'"([^"]*)"', b) if x not in SKIP]
     return out
+
+
+def tables():
+    """The tree's tables. Kept for the fallback paths."""
+    return parse_tables(INO.read_text(encoding="utf-8", errors="replace"))
 
 
 def site_page():
@@ -127,7 +152,6 @@ def main():
               "(no .publish.local, or no site there)")
         return 0
 
-    t = tables()
     html = page.read_text(encoding="utf-8", errors="replace")
     body = blocks_on_page(html)
 
@@ -136,6 +160,41 @@ def main():
     ok("the page still claims the list is complete",
        "Every entry in the menus" in html,
        "the completeness claim is gone, so this check is about nothing")
+
+    # ── which version the page is claiming about ──────────────────────
+    #
+    # "Every entry in the menus, as of 0.4.43" is a claim about a released
+    # image, not about the working tree. Reading the tables out of the tree
+    # compares the page to code nobody can download yet, which is how three
+    # SubGHz screens came to be described on a page headed "as of 0.4.41"
+    # while 0.4.41 contained none of them.
+    m = re.search(r"Every entry in the menus, as of ([0-9]+(?:[.][0-9]+)*)", html)
+    claimed = m.group(1) if m else None
+    ok("the page names the version it is claiming about", claimed is not None,
+       "no version after 'as of', so there is nothing to compare against")
+
+    src = ino_at(claimed)
+    unreleased = {}
+    if src is not None:
+        t = parse_tables(src)
+        print("  ..    comparing against tag v%s" % claimed)
+        # Entries the tree has and the tag does not: menu rows added since
+        # the release the page names. The page must not list these, and
+        # that is the only reverse assertion made here.
+        tree = tables()
+        for name, labels in tree.items():
+            extra = [x for x in labels if x not in t.get(name, [])]
+            if extra:
+                unreleased[name] = extra
+    else:
+        t = tables()
+        # Not a failure. Before the tag exists the tree is what the image
+        # being cut will contain, and inside the source archive there is no
+        # repository to ask. Both are worth saying out loud, because the
+        # check is weaker in those runs than it looks.
+        print("  ..    no tag v%s; comparing against the working tree, so "
+              "this run cannot catch a page that describes unreleased work"
+              % claimed)
 
     for heading, names in BLOCKS.items():
         want = []
@@ -164,6 +223,24 @@ def main():
             FAILED.append(heading)
         else:
             print("  ok    %-10s all %d entries listed" % (heading, len(want)))
+
+    # ── and nothing on the page that the named release does not have ──
+    #
+    # This is the direction that was missing. The forward check passes
+    # happily when the page lists more than the firmware, which is exactly
+    # what "the site describes unreleased features" looks like.
+    for heading, names in BLOCKS.items():
+        block = body.get(heading)
+        if block is None:
+            continue
+        for tbl in names:
+            for label in unreleased.get(tbl, []):
+                ok("%-14s does not promise %s" % (heading, label),
+                   label not in block,
+                   "the page lists %s under a heading reading \"as of %s\", "
+                   "and v%s does not contain it: somebody downloading that "
+                   "release does not get this"
+                   % (label, claimed, claimed))
 
     print()
     if FAILED:
