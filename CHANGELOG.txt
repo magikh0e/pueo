@@ -16,11 +16,19 @@ this file.
 
   A waterfall for the 2.4 GHz scanner. One feature, and it has not run.
 
-  * THE SCANNER MEASURED WELL AND THREW THE SHAPE AWAY.
+  * THE SCANNER THREW THE SHAPE AWAY.
 
-    It sweeps every channel with the NRF24's carrier detector, fifty passes
-    each, against a calibrated noise floor, which is better measurement than
-    most of what is published for this part. Then it drew a bar per channel.
+    It sweeps every channel with the NRF24's carrier detector, ten passes
+    each, and counts how many of them saw a carrier. Then it drew a bar per
+    channel.
+
+    An earlier version of this entry said fifty passes against a calibrated
+    noise floor, and called that better measurement than most of what is
+    published for this part. Fifty is the one-shot Scan and Cal buttons;
+    the continuous view is ten. And the noise floor is measured and then
+    dropped: calibrateBackgroundNoise fills backgroundNoise[], and the only
+    thing that reads it back is the loop finding the largest entry for the
+    "Calibrate done" message. Nothing subtracts it. See below.
 
     A bar chart answers where there is energy. It cannot answer what kind of
     thing is making it, because what distinguishes things in this band is how
@@ -46,6 +54,18 @@ this file.
 
     A real limitation rather than one worked around, and the right trade for a
     view whose value is in watching it live.
+
+  * THE NOISE FLOOR IS MEASURED AND NOT USED.
+
+    Found while correcting the paragraph above. Cal sweeps the band twice
+    over fifty passes, averages into backgroundNoise[], names the worst
+    channel on screen, and no other code reads the array. The button works
+    and its result goes nowhere.
+
+    Not fixed here, because subtracting a floor changes what every reading
+    means and that wants its own release with something to compare against.
+    Written down so the next person to read calibrateBackgroundNoise does
+    not assume, as this entry did, that its output reaches the display.
 
   * ONE SWEEP, TWO RENDERERS.
 
