@@ -11,6 +11,108 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.42 - 2026-10-06
+-------------------
+
+  Sub-GHz: a .sub goes back out as well as in, a protocol with no mapping
+  stops pretending it has one, and a screen for finding the frequency.
+
+  * PROTOCOL 0 IS AN ABSENCE, NOT A NUMBER.
+
+    An unmapped protocol parsed Ok with protocol 0, the import stored it
+    without comment, the browser printed a bare "0", and rc-switch's
+    setProtocol() clamps anything below 1 up to 1. So importing a CAME file
+    and pressing Send transmitted Princeton timing under CAME's name, did
+    nothing, and reported success.
+
+    The table is not widened. The comment that says guessing a timing
+    produces a profile which transmits something subtly wrong is right, and
+    widening it was the wrong fix for the wrong problem. Protocol 0 is loud
+    in all three places instead: the import names the protocol it cannot
+    send, the browser shows "none", and the send refuses.
+
+    The send refuses it before it checks for a radio. A profile with no
+    mapping cannot be transmitted by any radio, so answering "fit a CC1101"
+    sends somebody after hardware that would not change the answer, and it
+    buried the one refusal needing no hardware behind one that does, which
+    is how it came to be untestable on a board with no module.
+
+  * A ROLLING CODE IS A DIFFERENT ANSWER, NOT A WEAKER ONE.
+
+    KeeLoq, Somfy, Star Line, Security+ and the rest carry a counter, so a
+    captured one is good for nothing: the receiver has moved past it before
+    you can transmit. Every one is longer than 32 bits, so they already
+    failed on bit count, and "bit count out of range" is true and sends
+    somebody looking for a shorter capture.
+
+    Named rather than detected, because the names are facts and the
+    detection would be guesswork. This changes the sentence, not the
+    outcome, and nothing in it helps transmit one.
+
+  * SUBGHZ > EXPORT .SUB.
+
+    SubFile::write renders a key file and the screen writes one per profile
+    to /pueo/subghz. A capture otherwise leaves this device only as a packed
+    binary nothing else reads, and the five EEPROM slots rotate older ones
+    into that format as new ones arrive.
+
+    TE is omitted rather than invented: the EEPROM budget is exactly full at
+    five 28-byte records, so there is nowhere to store one, and a reader
+    that needs TE is better off applying its own default than a guess from
+    here. A profile with protocol 0 cannot be written at all, because the
+    record never stored the name; those rows are marked on the list rather
+    than refusing on the press.
+
+  * SUBGHZ > FREQ ANALYSER.
+
+    Replay Attack wants a frequency chosen before it will listen, and a
+    remote on the wrong one is indistinguishable from a remote that is not
+    transmitting. Twelve entries, twelve ambiguous attempts. This parks on
+    each in turn and reads the CC1101's RSSI.
+
+    Peak hold with a slow decay is what makes it usable. A key fob
+    transmits for about 200 ms, which an instantaneous bar chart has
+    forgotten by the time you look up.
+
+    Receive only, so no Stealth gate, same as the Jamming Detector.
+    check_stealth.py asserts the premise rather than the conclusion: both
+    file screens touch no radio at all, and the analyser tunes and reads but
+    never keys. A feature gets left off the gated list by not transmitting
+    on the day it was written, so the claim that lets it off is the one
+    worth pinning.
+
+  * DRAM RAN OUT, AND THE FIX CAME FROM THE CODE THAT CAUSED IT.
+
+    Adding the export screen overflowed dram0_0_seg by 16 bytes and the
+    image would not link. The two file screens share one status String,
+    being the same screen pointing opposite ways and never both up, and the
+    analyser keeps the held peak only, the decay already showing a signal
+    going away.
+
+  * WHAT IS VERIFIED, AND WHAT IS NOT.
+
+    On hardware: a .sub imports and reads back as 433.92 MHz, 24 bits,
+    0x123456, and exports byte-for-byte to the expected file. The round trip
+    closes in both directions, which means the C++ parser and writer and the
+    Python transcription behind 61,453 assertions now agree on a real file
+    on a real board rather than only on each other. Saved Profile opens and
+    lists with no CC1101 fitted, and Send refuses and returns to the list.
+
+    Not run on hardware: the Freq Analyser. It needs a CC1101, which is not
+    connected yet. Its 1200 us settle time after each retune is a plausible
+    figure rather than a measured one, and if the bars read the previous
+    frequency that is the number to raise.
+
+  * WHY NOW.
+
+    The website had already been written as though these shipped, including
+    a menu list headed "as of 0.4.41" carrying two screens 0.4.41 does not
+    have. check_site_menu.py could not catch that: it compares the page
+    against the working tree, which is ahead of the release by design.
+
+    Fifty-five check scripts.
+
+
 0.4.41 - 2026-10-06
 -------------------
 
