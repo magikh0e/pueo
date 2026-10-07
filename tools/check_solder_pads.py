@@ -121,11 +121,17 @@ def main():
             problems.append("pad %d (%s): table says %s, drawing draws it %s"
                             % (num, tn, tk or "plain", sk or "plain"))
 
-    # The corner. Fifteen down the right edge, the rest along the bottom.
-    if n_right != 15:
-        problems.append("%d numbered pads on the right edge, expected 15" % n_right)
-    if n_bottom != 4:
-        problems.append("%d numbered pads on the bottom edge, expected 4" % n_bottom)
+    # Numbers stop at the corner. One to fourteen is the same count under
+    # either convention and holds every pad anyone solders to; past it the
+    # drawing and the table name pads instead, because that is where the
+    # two conventions disagree and where the flash pins are.
+    if n_right != 14:
+        problems.append("%d numbered pads on the right edge, expected 14"
+                        % n_right)
+    if n_bottom != 0:
+        problems.append("%d numbered pads on the bottom edge, expected none: "
+                        "past the corner they are named, not numbered"
+                        % n_bottom)
     for side, want in (("right", 15), ("left", 15), ("bottom", 8)):
         if geom[side] != want:
             problems.append("%d pads drawn on the %s edge, expected %d"

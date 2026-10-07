@@ -290,8 +290,9 @@ against an Espressif datasheet invites the conclusion that one of them is
 wrong when both are just describing a shared footprint. Read the FCC line,
 not the big print.
 
-**That edge has fifteen pads, not nineteen.** The module is the usual
-WROOM-32 footprint: fifteen down each long edge and eight across the bottom.
+**Count to fourteen and stop.** Fourteen is the last pad before the corner,
+and it is the same fourteen whichever way you attribute the corners, so it is
+the part of the count worth relying on. Everything you solder is in it.
 
 **You may well count fourteen and ten, and that is the same module.**
 Counted on the board in hand it reads fourteen down each long edge and ten
@@ -309,17 +310,25 @@ no
 difference to anything you are about to solder. It matters only if you count
 first, find fourteen, decide the table below is wrong and renumber from
 scratch. Do not: check a pad against the list by what it is wired to, with a
-meter, rather than by its position in a count. So the count
-reaches 15 at the bottom-right corner, **turns it**, and 16 to 19 run leftwards
-along the bottom edge. All six targets are at 15 or below, so none of them is
-around that corner. Three of the pads that end the board are.
+meter, rather than by its position in a count. Past fourteen the
+drawing names pads rather than numbering them, because that is where the two
+conventions disagree and also where the pads you must not touch live. All six
+targets are at twelve or below, so none is near the corner. Three of the pads that end the board are.
 
 ```
-   1 GND       6 IO21      11 IO17  <- PN532 SS       16 IO15
-   2 IO23 <-   7 NC        12 IO16  <- NRF24 CE       17 SD1   !!
-   3 IO22      8 IO19 <-   13 IO4                     18 SD0   !!
-   4 TXD0      9 IO18 <-   14 IO0    !!               19 CLK   !!
-   5 RXD0     10 IO5   !!  15 IO2
+   1 GND       6 IO21      11 IO17  <- PN532 SS
+   2 IO23 <-   7 NC        12 IO16  <- NRF24 CE
+   3 IO22      8 IO19 <-   13 IO4
+   4 TXD0      9 IO18 <-   14 IO0    !!
+   5 RXD0     10 IO5   !!
+```
+
+Round the corner the pads are named rather than numbered, because that is
+where the two counting conventions disagree and where the ones you must not
+touch are. `IO2` is the corner itself, then `IO15`, `SD1`, `SD0` and `CLK`
+run along the bottom. The last three are the module's own flash.
+
+```
 ```
 
 The last four in that list are the ones on the bottom edge.
