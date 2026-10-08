@@ -361,7 +361,7 @@ missed:
 - IR removed: no IR LED or receiver exists on this board, so 140 KB of
   protocol tables could never run. Flash went from 93% to 85%
 - `tools/make_release.sh`: source archive and merged flash image
-- `.github/FUNDING.yml`: fork funding, upstream's Patreon kept
+- `.github/FUNDING.yml`: fork funding, one entry, upstream credited in the README instead
 
 That list predates the board. One was flashed and run on 2026-09-20, and the
 boot screen, the menus, the packet monitor, Surveillance and Hunt all work on

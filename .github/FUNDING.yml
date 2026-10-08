@@ -1,21 +1,17 @@
-# Pueo only, and both of these are magikh0e.
+# Pueo only, and the one name here is magikh0e.
 #
-# CiferTech's Patreon used to sit here too, so that sponsorship could reach
-# the project this is built on. The intent was right and the placement was
-# not: GitHub renders the Sponsor dropdown by platform name, so a visitor
-# saw "Patreon" and "Buy Me a Coffee" with nothing saying which went where.
-# Anyone meaning to support Pueo had even odds of funding somebody else.
+# Buy Me a Coffee alone, on purpose. GitHub renders the Sponsor dropdown by
+# platform name and nothing else, so every extra entry is another thing a
+# visitor has to choose between with no information to choose on. One entry
+# cannot be picked wrongly.
 #
-# That link moved to the Lineage section of README.md, where it sits next to
-# the sentence explaining who CiferTech is and why nearly every feature here
-# is theirs. Credit reads as credit there. In a dropdown it read as a coin
-# toss.
-#
-# So the Patreon below is this fork's, not upstream's, and the ambiguity
-# that got the old entry removed does not apply: both names here are the
-# same person, so whichever a visitor picks goes to the same place. If
-# anything else is ever added, it has to hold to that, one destination,
-# however many platforms.
+# CiferTech's Patreon used to sit here, so that sponsorship could reach the
+# project this is built on. The intent was right and the placement was not:
+# a visitor saw two platform names with nothing saying which went where, and
+# anyone meaning to support Pueo had even odds of funding somebody else.
+# That link moved to the Lineage section of README.md, next to the sentence
+# explaining who CiferTech is and why nearly every feature here is theirs.
+# Credit reads as credit there. In a dropdown it read as a coin toss.
 #
 # GitHub Sponsors belongs here as well and is not here yet. It takes no
 # platform cut, which at this scale is most of the difference, and it sits
@@ -23,11 +19,9 @@
 # below, commented, because the listing does not exist: the GraphQL field
 # hasSponsorsListing is false for this account, so /sponsors/magikh0e
 # redirects to the profile. Uncommented now it would put "GitHub" in the
-# dropdown pointing at a page that cannot take a payment, which is the
-# same coin toss as before and worse, because the coin has no second side.
+# dropdown pointing at a page that cannot take a payment.
 #
 # Enable it at github.com/sponsors, finish the bank and tax details, then
 # uncomment. Nothing else needs to change.
-patreon: magikh0e
 buy_me_a_coffee: magikh0e
 # github: magikh0e
