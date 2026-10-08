@@ -192,6 +192,8 @@ INCLUDE=(
   "tools/check_file_server.py"
   "tools/check_nrf_presence.py"
   "tools/check_sd_paths.py"
+  "tools/check_sd_reset.py"
+  "tools/check_fft_scratch.py"
   "tools/trace_logo.py"
   "tools/inline_logo.py"
   "tools/check_logo_scale.py"
