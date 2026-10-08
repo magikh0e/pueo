@@ -11,6 +11,109 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.46 - 2026-10-07
+-------------------
+
+  Four signatures named the wrong kind of thing, one of them for a long
+  time. Nine more were missing.
+
+  * SHOTSPOTTER WAS FILED AS A PLATE READER.
+
+    D4:11:D6 is registered to ShotSpotter, so the vendor was right and
+    Conf::Strong was earned. The company makes acoustic gunshot detection.
+    Kind::Alpr told somebody standing under a microphone array that their
+    number plate was being read, which is a different claim about a
+    different device, and the only one of the two the screen could show.
+
+    Flock's Raven is the same kind of sensor from a different vendor, and
+    its three GATT entries were in the same wrong place.
+
+    Seven rows between them, and no existing kind fitted either, so there is
+    a Kind::Acoustic. That is a tenth kind and a tenth row on the filter;
+    the panel takes it, with the last line at y=308 against a footer that
+    starts at 446.
+
+  * AND THREE MORE, IN THE SAME SWEEP.
+
+    Utility, Inc. makes the BodyWorn camera line. Its two blocks were
+    Kind::Accessory, which is the kind a charging dock gets.
+
+    Five Motorola Solutions blocks were Kind::Alpr. The comment directly
+    above them already said "one of its addresses is far more likely a
+    handheld radio than a camera", and then filed them as plate readers and
+    hedged with Conf::Likely. Hedging the confidence does not fix a wrong
+    category: a Likely ALPR still reads as a plate reader to whoever is
+    holding the device. They are Kind::Vehicle.
+
+    Nine Silicon Laboratories blocks told two different stories about the
+    same company's chips. Three said "SiLabs (ALPR?)" and six said "FS
+    battery?", all nine registered to Silicon Laboratories, and the six
+    asserted a product the registry does not support. They say the same
+    thing now and stay Weak, for the reason that was already written down:
+    the name is the stronger signal and kNameInSigs carries it.
+
+  * NINE BLOCKS ADDED, OUT OF A HUNDRED AND EIGHTY-TWO ON OFFER.
+
+    RF Sentinel (CIS-C0/RFSentinel, GPL-3.0) is an Android app doing
+    Spotter's job on a phone, and it keeps a prefix list this one does not
+    know about. It carries 182 OUI prefixes missing from here.
+
+    Most are not worth taking. 111 score under 60 on their own scale, and
+    23 of the confident ones are MA-M or MA-S assignments living inside
+    shared IEEE pool blocks: eight under 70:B3:D5, seven under 00:50:C2,
+    three under 8C:1F:64. Matching here is memcmp over three bytes, so
+    taking those would mean truncating to the pool block and reporting every
+    small vendor inside it as a plate reader. That is a trap rather than a
+    gap, and the right fix is a wider matcher rather than a wider claim.
+
+    Eleven were plain MA-L blocks. Each was looked up in the IEEE registry
+    rather than carried over, and ten agreed: Gatsometer and Redflex as
+    traffic enforcement cameras, WatchGuard Video, VIEVU, Zepcam, ICOP
+    Digital and International Police Technologies as police video, Patrol
+    Products Consortium as patrol-car upfit, and Decatur Electronics as
+    radar, that last one Likely because the same radar is sold into sports
+    timing.
+
+    D8:1F:65 is not among them. They attribute it to Axon from field
+    observation and the registry returns "Private", which is exactly what
+    check_oui_registry.py calls asserting something the registry does not
+    say. Cellebrite is held back rather than rejected: a phone forensic
+    appliance is worth knowing about and there is no honest kind for it
+    here, which is a decision rather than an addition.
+
+    283 signatures now, 135 of them OUI rows, 61 of those Strong.
+
+  * THE CHECK THAT CONSULTS THE REGISTRY COULD NOT RUN.
+
+    standards-oui.ieee.org answers urllib's default User-Agent with HTTP
+    418, and curl with a rejection page served as 200. Either way
+    check_oui_registry.py --fetch produced no registry, and the one check
+    that verifies a vendor claim against its authority had quietly become
+    unusable. It sends a browser User-Agent now, and refuses a response too
+    short to be the registry rather than caching it, because a cache full of
+    filter-page HTML fails every row for the wrong reason.
+
+  * THE PUBLISHED LIST IS GENERATED AGAIN.
+
+    magikh0e/surveillance-signatures publishes this header as CSV, JSON and
+    a README, and its CONTRIBUTING.md tells people not to edit those files
+    because "they will be overwritten by the next regeneration". Nothing
+    performed that regeneration. There was no extraction script in either
+    repository, so the published snapshot was whatever had last been made by
+    hand and a row changed here reached it only if somebody remembered.
+
+    One had already drifted: 82:6B:F2 reads "LAA, not a vendor" here and was
+    published with an empty label.
+
+    tools/extract_signatures.py rewrites the rows and the counts and leaves
+    the prose alone, because the table titles, the grading notes and the
+    paragraph on why Mesh rows belong in a surveillance list were written
+    rather than derived. tools/check_signatures_export.py fails when the
+    published files and this header disagree, and says nothing when the list
+    is not cloned beside this tree, which is the case inside the source
+    archive.
+
+
 0.4.45 - 2026-10-07
 -------------------
 
