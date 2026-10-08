@@ -4957,6 +4957,10 @@ static bool uiDrawn = false;
 
 static constexpr uint16_t SCAN_SWEEPS        = 25;
 static constexpr uint16_t DISPLAY_SWEEPS     = 10;
+/* What Cal sweeps. backgroundNoise[] is hits out of this many passes, so
+ * the display can scale it to its own sweep count rather than against a
+ * number nobody wrote down. */
+static constexpr uint16_t CAL_PASSES         = 100;
 static constexpr uint16_t RX_SETTLE_US       = 100;
 static constexpr uint16_t RPD_DWELL_US       = 50;
 static constexpr uint32_t UI_THROTTLE_MS     = 35;
@@ -4968,7 +4972,11 @@ static constexpr uint16_t BUTTON_POLL_STRIDE = 8;
 #define _NRF24_RF_SETUP 0x06
 #define _NRF24_RPD      0x09
 
+/* Hits per channel out of CAL_PASSES, or all zero when Cal has not run.
+ * Zero is the safe default: subtracting nothing is what the scanner did
+ * for its whole life before this. */
 int backgroundNoise[CHANNELS] = {0};
+static bool s_haveFloor = false;
 
 /* What sits at an RF_CH, as a short tag for the scan line.
  *
@@ -5229,38 +5237,51 @@ void calibrateBackgroundNoise() {
 
   Print("[!] Calibrating noise floor...", UI_TEXT, false);
 
-  for (int i = 0; i < 2; i++) {
-    disable();
-    for (int j = 0; j < 50; j++) {
-      for (int i = 0; i < CHANNELS; i++) {
-        if ((i % BUTTON_POLL_STRIDE) == 0) {
-          scannerPollNavButtons();
-        }
+  /* Both arrays start clean. channel[] used to carry whatever the last
+   * Scan left in it, and backgroundNoise[] accumulated across presses, so
+   * calibrating twice stored twice the floor. */
+  memset(channel, 0, sizeof(channel));
+  memset(backgroundNoise, 0, sizeof(backgroundNoise));
+  s_haveFloor = false;
 
-        setRegister(_NRF24_RF_CH, (uint8_t)i);
-        enable();
-        delayMicroseconds(RX_SETTLE_US + RPD_DWELL_US);
-        disable();
-        if (carrierDetected()) channel[i]++;
+  disable();
+  for (uint16_t pass = 0; pass < CAL_PASSES && scanning; pass++) {
+    for (int i = 0; i < CHANNELS; i++) {
+      if ((i % BUTTON_POLL_STRIDE) == 0) {
+        scannerPollNavButtons();
       }
-    }
-    for (int j = 0; j < CHANNELS; j++) {
-      backgroundNoise[j] += channel[j];
 
+      setRegister(_NRF24_RF_CH, (uint8_t)i);
+      enable();
+      delayMicroseconds(RX_SETTLE_US + RPD_DWELL_US);
+      disable();
+      if (carrierDetected()) channel[i]++;
     }
   }
 
   int maxNoiseCh = 0;
   int maxNoise = 0;
   for (int i = 0; i < CHANNELS; i++) {
-    backgroundNoise[i] /= 5;
+    /* Hits out of CAL_PASSES, which is what display() scales against. */
+    backgroundNoise[i] = channel[i];
     if (backgroundNoise[i] > maxNoise) {
       maxNoise = backgroundNoise[i];
       maxNoiseCh = i;
     }
   }
+  memset(channel, 0, sizeof(channel));
+  s_haveFloor = true;
 
-  Print("[+] Calibrate done  Ch" + String(maxNoiseCh) + " " + scannerChannelGHzText(maxNoiseCh) + "GHz", UI_WARN, false);
+  if (maxNoise == 0) {
+    Print("[+] Floor set: nothing heard, nothing subtracted", UI_WARN, false);
+  } else {
+    Print("[+] Floor set  worst Ch" + String(maxNoiseCh) + " " +
+          scannerChannelGHzText(maxNoiseCh) + "GHz  " + String(maxNoise) +
+          "/" + String((int)CAL_PASSES), UI_WARN, false);
+    /* It subtracts from here on, so say that rather than leaving somebody
+     * to wonder why a channel went quiet. */
+    Print("[!] Subtracted now. Re-cal if a net was up.", UI_DIM_TEXT, false);
+  }
 }
 
 void scan() {
@@ -5982,6 +6003,22 @@ void display() {
       } else if ((i % BUTTON_POLL_STRIDE) == 0) {
         scannerPollNavButtons();
       }
+    }
+  }
+
+  /* Take the floor off before smoothing, so the bars and the waterfall see
+   * the same numbers: they share s_smoothValues and the whole point of the
+   * second view is that it cannot disagree with the first.
+   *
+   * Scaled from CAL_PASSES to this frame's sweeps, and clamped at zero. A
+   * channel that only ever showed the floor reads nothing now, which is
+   * what measuring a floor was for. */
+  if (s_haveFloor) {
+    for (int i = 0; i < N; i++) {
+      const int fl = ((int)backgroundNoise[i] * (int)DISPLAY_SWEEPS)
+                     / (int)CAL_PASSES;
+      const int v = (int)frameHits[i] - fl;
+      frameHits[i] = (uint8_t)(v > 0 ? v : 0);
     }
   }
 

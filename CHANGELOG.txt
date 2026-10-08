@@ -11,6 +11,71 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.44 - 2026-10-07
+-------------------
+
+  Cal measures a noise floor and the scanner subtracts it. It did neither.
+
+  * THE BUTTON WORKED AND ITS RESULT WENT NOWHERE.
+
+    calibrateBackgroundNoise swept the band, filled backgroundNoise[], and
+    printed the worst channel. The only code that ever read that array back
+    was the loop finding the largest entry for the message. Nothing
+    subtracted it from anything, so the scanner drew the same bars before
+    and after a calibration.
+
+    Found while correcting a changelog paragraph that claimed the sweep ran
+    "against a calibrated noise floor". It did not, and the claim had been
+    on the website as well.
+
+  * AND THE MEASUREMENT ITSELF WAS WRONG THREE WAYS.
+
+    channel[] was never cleared, so a calibration started from whatever the
+    last Scan had left in it, and the second of its two rounds counted the
+    first round again: the stored value was 2*round1 + round2.
+
+    backgroundNoise[] was never cleared either, so pressing Cal twice stored
+    twice the floor.
+
+    Then /= 5 against a hundred and fifty passes' worth of accumulation,
+    which is a scale matching nothing the display counts in. None of this
+    mattered while the result was unused, which is presumably why it
+    survived.
+
+  * WHAT IT DOES NOW.
+
+    One clean run of CAL_PASSES over every channel from a cleared start,
+    stored as hits out of CAL_PASSES so the display can scale it to its own
+    sweep count. display() takes the floor off each channel before
+    smoothing, clamped at zero.
+
+    Before smoothing matters: the bars and the waterfall share
+    s_smoothValues, and the whole argument for the second view is that it
+    cannot disagree with the first about what was measured.
+
+    Zero is the safe default. Until Cal runs, backgroundNoise[] is all zero
+    and nothing is subtracted, which is what the scanner did for its entire
+    life before this.
+
+  * CAL SAYS WHAT IT DID, BECAUSE NOW IT DOES SOMETHING.
+
+    It reports the worst channel and its count out of CAL_PASSES, then that
+    it is subtracting from here on. A number that silently removes signal
+    has to announce itself.
+
+    It also carries the hazard: calibrate while a network is up and you
+    subtract that network, and the scanner will then show a quiet channel
+    where there is a busy one. That is the worst failure a spectrum view can
+    have, because it looks like a working instrument. Cal always re-measures
+    from zero, so standing somewhere quiet and pressing it again is the fix.
+
+  * NOT RUN. The NRF24 needs three solder joints and the shared SPI bus, and
+    none of that is wired, so nothing here has been on a board. The
+    arithmetic is checkable by reading and the behaviour is not.
+
+  Fifty-five check scripts.
+
+
 0.4.43 - 2026-10-06
 -------------------
 
@@ -19,7 +84,7 @@ this file.
   * THE SCANNER THREW THE SHAPE AWAY.
 
     It sweeps every channel with the NRF24's carrier detector, ten passes
-    each, and counts how many of them saw a carrier. Then it drew a bar per
+    each, and counts how many of them saw a carrier. Then it draws a bar per
     channel.
 
     An earlier version of this entry said fifty passes against a calibrated
@@ -54,18 +119,6 @@ this file.
 
     A real limitation rather than one worked around, and the right trade for a
     view whose value is in watching it live.
-
-  * THE NOISE FLOOR IS MEASURED AND NOT USED.
-
-    Found while correcting the paragraph above. Cal sweeps the band twice
-    over fifty passes, averages into backgroundNoise[], names the worst
-    channel on screen, and no other code reads the array. The button works
-    and its result goes nowhere.
-
-    Not fixed here, because subtracting a floor changes what every reading
-    means and that wants its own release with something to compare against.
-    Written down so the next person to read calibrateBackgroundNoise does
-    not assume, as this entry did, that its output reaches the display.
 
   * ONE SWEEP, TWO RENDERERS.
 
