@@ -265,7 +265,14 @@ void drawBody() {
 void setup() {
   Serial.begin(115200);
   delay(50);
-  Serial.println("[beacon] start");
+  /* The version goes out here as well as onto the panel. It used to be on
+   * the TFT alone, which meant the only way to know what a beacon was
+   * running was to look at it: over USB it said "[beacon] start" and
+   * nothing else, so a board flashed weeks ago and one flashed minutes ago
+   * were indistinguishable in a log. The detector has always printed its
+   * version, and the same reasoning applies harder here, because this
+   * board's whole job is to be the known-good half of a bench pair. */
+  Serial.println("[beacon] start, bench transmitter " PUEO_VERSION);
 
   pinMode(BACKLIGHT_PIN, OUTPUT);
   digitalWrite(BACKLIGHT_PIN, HIGH);
