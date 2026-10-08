@@ -152,6 +152,15 @@ def main():
                 # this is looking for.
                 if lit == prefix or lit.startswith(prefix + "/"):
                     continue
+                # Nothing but separators and dots is a relative-segment
+                # spelling, not a destination: "/.", "/./", "..". These turn
+                # up in sdTreeGuarded, which refuses them so the SD reset
+                # cannot climb out of PUEO_DIR. A literal being matched
+                # against is the opposite of a path being written to, and
+                # reading one as a stray root path reported the guard as the
+                # thing it exists to prevent.
+                if lit and not lit.strip("/."):
+                    continue
                 if lit in LEGACY:
                     legacy_seen.setdefault(lit, []).append(
                         "%s:%d" % (path.name, i))

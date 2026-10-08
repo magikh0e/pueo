@@ -2959,6 +2959,109 @@ static bool sdRmdirCompat(const String& path) {
   return false;
 }
 
+/* ── recursive removal, for the SD reset ────────────────────────────────
+ *
+ * Nothing else in the tree removes a directory that has anything in it:
+ * SdFileManager deletes one entry at a time and says in its own comment
+ * that rmdir fails otherwise.
+ *
+ * Only ever under PUEO_DIR. The card is the owner's and may hold anything;
+ * these directories are the ones this firmware created. sdTreeGuarded is
+ * the single place that decides, and both the measure and the delete call
+ * it, so a later caller cannot point this at the root by handing it a
+ * different string.
+ */
+static constexpr int kSdTreeMaxDepth = 6;
+
+static bool sdTreeGuarded(const String& path) {
+  String p = path;
+  if (p.length() > 1 && p.endsWith("/")) p.remove(p.length() - 1);
+
+  /* No relative segments. "/pueo/.." starts with the prefix and names the
+   * card root, and "." would recurse into itself until the depth limit
+   * stopped it. Neither is built here: the walkers descend using names from
+   * openNextFile, which does not return the "." and ".." that a FAT
+   * directory holds on disk. That is the SD layer's behaviour rather than
+   * this code's, which is not a sound thing for a recursive delete to rest
+   * on, so the segments are refused outright. */
+  if (p.indexOf("..") >= 0) return false;
+  if (p.endsWith("/.") || p == ".") return false;
+  if (p.indexOf("/./") >= 0) return false;
+
+  /* Exact equality first: PUEO_DIR is the path the wipe is called with and
+   * does not match PUEO_DIR "/". The prefix test carries the separator, so a
+   * sibling called /pueo-backup is a different directory rather than a
+   * match. */
+  if (p == PUEO_DIR) return true;
+  return p.startsWith(PUEO_DIR "/");
+}
+
+/* Count what is there without touching it, so the screen can say what the
+ * next press destroys. */
+void sdTreeStat(const String& path, uint32_t* files, uint32_t* bytes,
+                int depth) {
+  if (depth > kSdTreeMaxDepth || !sdTreeGuarded(path)) return;
+  File dir = sdOpenCompat(path);
+  if (!dir) return;
+  if (!dir.isDirectory()) {
+    if (files) (*files)++;
+    if (bytes) *bytes += (uint32_t)dir.size();
+    dir.close();
+    return;
+  }
+  for (File e = dir.openNextFile(); e; e = dir.openNextFile()) {
+    String child = path;
+    if (!child.endsWith("/")) child += "/";
+    String n = e.name();
+    const int slash = n.lastIndexOf('/');
+    if (slash >= 0) n = n.substring(slash + 1);
+    child += n;
+    const bool isDir = e.isDirectory();
+    const uint32_t sz = isDir ? 0 : (uint32_t)e.size();
+    e.close();
+    if (isDir) {
+      sdTreeStat(child, files, bytes, depth + 1);
+    } else {
+      if (files) (*files)++;
+      if (bytes) *bytes += sz;
+    }
+  }
+  dir.close();
+}
+
+/* Depth first, because a directory cannot go until it is empty. Returns
+ * the number of entries it could not remove, so the caller can report a
+ * partial wipe as a partial wipe rather than as success. */
+uint32_t sdTreeRemove(const String& path, int depth) {
+  if (depth > kSdTreeMaxDepth) return 1;
+  if (!sdTreeGuarded(path)) return 1;
+
+  File dir = sdOpenCompat(path);
+  if (!dir) return 0;            // nothing there is not a failure
+  if (!dir.isDirectory()) {
+    dir.close();
+    return sdRemoveCompat(path) ? 0 : 1;
+  }
+
+  uint32_t failed = 0;
+  for (File e = dir.openNextFile(); e; e = dir.openNextFile()) {
+    String child = path;
+    if (!child.endsWith("/")) child += "/";
+    String n = e.name();
+    const int slash = n.lastIndexOf('/');
+    if (slash >= 0) n = n.substring(slash + 1);
+    child += n;
+    const bool isDir = e.isDirectory();
+    e.close();
+    failed += isDir ? sdTreeRemove(child, depth + 1)
+                    : (sdRemoveCompat(child) ? 0 : 1);
+  }
+  dir.close();
+
+  if (!sdRmdirCompat(path)) failed++;
+  return failed;
+}
+
 static String normalizePath(const String& path) {
   if (path.length() == 0) return "/";
   String p = path;
@@ -3643,6 +3746,263 @@ void loop() {
 }
 
 } // namespace SdFileManager
+
+/* Defined here rather than in either feature, because it belongs to
+ * neither. See shared.h for why there is one pair and not two. */
+double pueoFftReal[ESP32DIV_FFT_SAMPLES];
+double pueoFftImag[ESP32DIV_FFT_SAMPLES];
+
+namespace SdReset {
+
+/* Wiping Pueo's directories, and only Pueo's.
+ *
+ * /pueo is everything this firmware writes: captures, logs, sub-GHz
+ * profiles, ESB dumps, ducky scripts, the captive portal files, the SSID
+ * list and the settings. Removing it puts the device back to how it came,
+ * which is what a reset means here.
+ *
+ * The card itself is never touched. A handheld with a "format the card"
+ * button is a way to lose somebody's photographs, and nothing outside
+ * /pueo was put there by this firmware.
+ */
+
+constexpr int kRowH = 13;
+
+/* Same frame as SdFileManager next door: status bar, a short header, and
+ * the footer the touch bar lives in. */
+constexpr int kStatusH = 20;
+constexpr int kHeaderH = 22;
+
+static int bodyTop() { return kStatusH + kHeaderH; }
+static int bodyBottom() {
+  return (int)tft.height() - FeatureUI::FOOTER_H - 2;
+}
+
+/* Every feature that reads the touch bar carries one of these. */
+static void resetWaitNavRelease(int pin) {
+  const uint32_t t0 = millis();
+  while (isTouchNavButtonPressed(pin) && millis() - t0 < 400) {
+    delay(5);
+  }
+  delay(30);
+}
+
+/* Listed so the screen can show what is in scope before anything is
+ * armed. Display only: the wipe removes the tree itself, so anything under
+ * /pueo that is not named here goes with it.
+ *
+ * sdTreeStat and sdTreeRemove, which do the walking, live over in
+ * SdFileManager because the SD path helpers they call are static to it, and
+ * reaching across is better than a second copy of the open/remove/rmdir
+ * fallbacks that exist because a leading slash is optional on some cards. */
+static const char* const kDirs[] = {
+  PUEO_DIR "/captures",
+  PUEO_DIR "/logs",
+  PUEO_DIR "/subghz",
+  PUEO_DIR "/esb",
+  PUEO_DIR "/ducky",
+  PUEO_DIR "/captive_portal",
+  PUEO_DIR "/config",
+};
+constexpr size_t kDirCount = sizeof(kDirs) / sizeof(kDirs[0]);
+
+/* Totals only. A per-directory breakdown cost fifty-six bytes of DRAM
+ * that this part does not have, and it is not what the decision turns on:
+ * how much goes, and that the settings go with it. The directory names are
+ * still listed so the scope is visible.
+ *
+ * s_status points at a literal rather than being a String, for the same
+ * reason. The one message that wanted a number was "Wiped N files", and
+ * the total above it re-measures to zero after a wipe, so it was saying
+ * the same thing twice. */
+static uint32_t    s_totalFiles = 0;
+static uint32_t    s_totalBytes = 0;
+static bool        s_armed = false;
+static uint32_t    s_armedUntil = 0;
+static bool        s_needRedraw = true;
+static bool        s_mounted = false;
+static const char* s_status = "";
+static bool        s_statusWarn = false;
+
+static bool mountCard() {
+  if (s_mounted && SD.exists("/")) return true;
+#if defined(CC1101_CS)
+  pinMode(CC1101_CS, OUTPUT);
+  digitalWrite(CC1101_CS, HIGH);
+#endif
+  restoreSdAfterSharedSpi();
+  s_mounted = isSDCardAvailable();
+  return s_mounted;
+}
+
+static String human(uint32_t bytes) {
+  char b[16];
+  if (bytes >= 1024u * 1024u) {
+    snprintf(b, sizeof(b), "%.1f MB", bytes / (1024.0 * 1024.0));
+  } else if (bytes >= 1024u) {
+    snprintf(b, sizeof(b), "%lu KB", (unsigned long)(bytes / 1024u));
+  } else {
+    snprintf(b, sizeof(b), "%lu B", (unsigned long)bytes);
+  }
+  return String(b);
+}
+
+static void measure() {
+  s_totalFiles = 0;
+  s_totalBytes = 0;
+  if (!mountCard()) {
+    s_status = "No SD card";
+    s_statusWarn = true;
+    return;
+  }
+  /* The whole tree in one walk. Counting per directory and summing gave
+   * the same number and wanted two arrays to hold the parts. */
+  SdFileManager::sdTreeStat(String(PUEO_DIR), &s_totalFiles, &s_totalBytes, 0);
+  s_status = s_totalFiles ? "Wipe arms, press twice" : "Nothing to wipe";
+  s_statusWarn = false;
+}
+
+static void wipe() {
+  if (!mountCard()) {
+    s_status = "No SD card";
+    s_statusWarn = true;
+    return;
+  }
+  /* The whole tree, not the listed directories: anything else under /pueo
+   * is ours too and leaving it behind would make this a half reset. */
+  const uint32_t failed = SdFileManager::sdTreeRemove(String(PUEO_DIR), 0);
+  measure();
+  /* measure() has just reset the total, so the line above this one says
+   * what is left. A partial wipe says so rather than claiming success. */
+  s_status = failed ? "Wiped, some would not go" : "Wiped";
+  s_statusWarn = (failed != 0);
+  s_armed = false;
+}
+
+static void draw() {
+  const int top = bodyTop() + 12;
+  const int bottom = bodyBottom();
+  tft.fillRect(0, kStatusH, tft.width(), bottom - kStatusH, TFT_BLACK);
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+
+  tft.setTextColor(UI_TEXT, TFT_BLACK);
+  tft.setCursor(6, top - 12);
+  tft.print("Reset SD");
+  tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+  tft.setCursor(120, top - 12);
+  tft.print(PUEO_DIR " only, never the card");
+
+  int y = top;
+  tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+  for (size_t i = 0; i < kDirCount && y + kRowH <= bottom - 28; i++) {
+    tft.setCursor(6, y);
+    tft.print(kDirs[i]);
+    y += kRowH;
+  }
+
+  y += 4;
+  tft.setTextColor(UI_TEXT, TFT_BLACK);
+  tft.setCursor(6, y);
+  tft.printf("total %lu file(s)  %s", (unsigned long)s_totalFiles,
+             human(s_totalBytes).c_str());
+  y += kRowH;
+
+  /* Settings live in config, so a wipe reverts them. Worth saying before
+   * rather than after. */
+  tft.setTextColor(UI_DIM_TEXT, TFT_BLACK);
+  tft.setCursor(6, y);
+  tft.print("includes settings: brightness, theme, scan");
+
+  if (s_armed) {
+    tft.setTextColor(UI_WARN, TFT_BLACK);
+    tft.setCursor(6, bottom - 12);
+    tft.print("ARMED: press Wipe again to delete");
+  } else {
+    tft.setTextColor(s_statusWarn ? UI_WARN : UI_DIM_TEXT, TFT_BLACK);
+    tft.setCursor(6, bottom - 12);
+    tft.print(s_status);
+  }
+}
+
+static void handleNavButtons() {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+    feature_exit_requested = true;
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
+    /* Re-count, and disarm while doing it: the number the arm was granted
+     * against is about to change. */
+    s_armed = false;
+    measure();
+    s_needRedraw = true;
+    resetWaitNavRelease(BTN_LEFT);
+  }
+  if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
+    const uint32_t now = millis();
+    if (s_totalFiles == 0) {
+      s_status = "Nothing to wipe";
+      s_statusWarn = false;
+    } else if (!s_armed || (int32_t)(now - s_armedUntil) >= 0) {
+      /* Arm, and let it lapse. A confirmation that stays armed is one that
+       * gets confirmed by the next person to pick the device up. */
+      s_armed = true;
+      s_armedUntil = now + 5000;
+    } else {
+      wipe();
+    }
+    s_needRedraw = true;
+    resetWaitNavRelease(BTN_RIGHT);
+  }
+}
+
+void setup() {
+  setTouchButtonInputEnabled(true);
+  /* Rescan on the left, as ApTracker does with its one extra action.
+   * The slots are (left, down, center, up, right). */
+  setTouchNavLabels("Rescan", nullptr, "Exit", nullptr, "Wipe");
+
+  s_armed = false;
+  s_needRedraw = true;
+  s_status = "";
+  s_statusWarn = false;
+  measure();
+
+  tft.fillRect(0, kStatusH, tft.width(), tft.height() - kStatusH, TFT_BLACK);
+  setupTouchscreen();
+  float v = readBatteryVoltage();
+  drawStatusBar(v, true);
+  redrawTouchButtonBar();
+}
+
+void loop() {
+  if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+    feature_exit_requested = true;
+    return;
+  }
+
+  maintainTouchNavBar();
+  handleNavButtons();
+
+  /* The arm lapsing is a state change nothing else notices. */
+  if (s_armed && (int32_t)(millis() - s_armedUntil) >= 0) {
+    s_armed = false;
+    s_needRedraw = true;
+  }
+
+  if (s_needRedraw) {
+    s_needRedraw = false;
+    draw();
+    redrawTouchButtonBar();
+  }
+  delay(20);
+}
+
+} // namespace SdReset
+
 
 namespace TouchCalib {
 static int stepIdx = 0;

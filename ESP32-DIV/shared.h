@@ -180,6 +180,23 @@ static const uint8_t OBF_WB[]   = {75, 97, 110, 109, 122, 92, 109, 107, 96, 38, 
 #define ESP32DIV_RFID_SRC_PAGES    128
 #endif
 
+/* The one FFT scratch pair, shared by the packet monitor and the sub-GHz
+ * spectrum.
+ *
+ * Both features refill all ESP32DIV_FFT_SAMPLES entries every frame, set the
+ * imaginary half to 1, transform in place, read the magnitudes and keep
+ * nothing, so there is no state here to preserve across a frame. They also
+ * cannot overlap: the dispatcher runs one feature's loop to its exit before
+ * returning to the menu.
+ *
+ * Kept as one pair because static DRAM is what this part runs out of first.
+ * Two pairs cost four kilobytes to hold the same numbers twice, while two
+ * screens in a row have had to be cut down to find a few dozen bytes.
+ */
+extern double pueoFftReal[ESP32DIV_FFT_SAMPLES];
+extern double pueoFftImag[ESP32DIV_FFT_SAMPLES];
+
+
 /* Bring-up 2026-09-20: the board in hand is a 3.5" ESP32-3248S035R
  * (ST7796, 320x480, XPT2046 on the display's own SPI bus), not the 2.8"
  * ESP32-2432S028R this profile was written for. Everything the upstream

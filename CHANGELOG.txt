@@ -11,6 +11,113 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.45 - 2026-10-07
+-------------------
+
+  A reset that removes Pueo's own directories, and the four kilobytes of
+  static memory it took to fit the screen in.
+
+  * SYSTEM > RESET SD.
+
+    It removes /pueo and nothing else. That is the whole of what this
+    firmware writes: captures, logs, sub-GHz profiles, ESB dumps, ducky
+    scripts, the captive portal files, the SSID list and the settings, so
+    removing it puts the device back to how it came.
+
+    The card itself is never touched and there is no option to touch it. A
+    handheld with a "format the card" button is a way to lose somebody's
+    photographs, and nothing outside /pueo was put there by this firmware.
+
+    The screen counts first. It shows how many files and how many bytes are
+    about to go before anything is armed, because "are you sure" is a
+    question nobody can answer and a total is one they can. It also says
+    that /pueo/config holds the settings, so a wipe reverts brightness,
+    theme, accent and auto-scan. That is a surprise worth having before
+    rather than after.
+
+    Wipe arms on the first press and fires on the second, and the arming
+    lapses after five seconds. A confirmation that stays armed is one that
+    gets confirmed by whoever picks the device up next.
+
+    A partial wipe reports itself as partial. sdTreeRemove returns the
+    number of entries it could not remove, so a card that refuses one file
+    does not get reported as a successful reset, leaving somebody to wonder
+    later why a capture is still there.
+
+  * THE SCOPE IS ONE FUNCTION, AND IT IS TESTED.
+
+    Nothing in the tree removed a directory with anything in it before
+    this: the file manager deletes one entry at a time and its own comment
+    notes that rmdir fails otherwise. So a recursive remove is new code, it
+    is the one operation here with no undo, and the card belongs to whoever
+    owns it.
+
+    sdTreeGuarded decides, and both the measure and the delete go through
+    it, so there is a single function to be sure of rather than a scope test
+    at each call site that the next call site forgets. The recursion is
+    bounded at six levels as well, because a corrupt directory entry on a
+    FAT volume is not a thing to find out about through a stack overflow.
+
+    tools/check_sd_reset.py holds it to eight paths it must accept and
+    twenty-seven it must refuse. Two of those refusals were failures when
+    the check was first run against the code. "/pueo-backup" is a different
+    directory that begins with the same five characters, which a prefix test
+    written without its separator deletes. "/pueo/.." begins with "/pueo/"
+    and names the card root: nothing builds that path today, since the
+    walkers descend using names from openNextFile and the SD layer does not
+    return the "." and ".." a FAT directory holds on disk, but that is the
+    library's behaviour rather than this code's and the wrong thing for a
+    recursive delete to rest on. Both segments are refused outright now.
+
+  * ONE FFT SCRATCH PAIR INSTEAD OF TWO.
+
+    The packet monitor kept double vReal[256] and vImag[256] at file scope
+    in wifi.cpp, and the sub-GHz spectrum kept vRealSUB and vImagSUB in
+    subghz.cpp. Same sample count, same 5 kHz rate, same shape, and both
+    are scratch in the strict sense: every frame fills all 256 entries,
+    transforms in place, reads the magnitudes out and keeps nothing.
+
+    So the second pair was four kilobytes of static DRAM holding a copy of
+    what the first pair holds, and the two features cannot run at once: the
+    dispatcher runs one feature's loop to its exit before returning to the
+    menu. They share one pair now, declared in shared.h and defined in
+    utils.cpp, which belongs to neither of them.
+
+    This is not housekeeping. Static DRAM is the first thing this part runs
+    out of, and the Reset SD screen would not link: sixteen bytes of state
+    overflowed dram0_0_seg by a hundred and four. The .sub export screen hit
+    the same wall two releases ago and overflowed by sixteen. Both were paid
+    for by cutting the feature that asked, which is the right order, and
+    this is the first saving here that costs nothing at all. Global
+    variables are at 120,500 bytes where they were at 124,564.
+
+    tools/check_fft_scratch.py asserts there is exactly one pair. A second
+    one is easy to add without noticing, because a new spectrum feature
+    wants a buffer and declaring its own is the obvious move, and nothing
+    about it fails: the build just gets four kilobytes closer to the wall
+    and the next small feature pays.
+
+  * TWO NAV LABELS SAT ON SLOTS NOTHING READ.
+
+    setTouchNavLabels takes its five slots positionally, as
+    (left, down, center, up, right), while a handler names its button
+    instead. So a label can sit on one slot with the code reading another,
+    and the result is a labelled button that does nothing beside an
+    unlabelled one that works.
+
+    Reset SD was written that way, and so was the Freq Analyser in 0.4.42:
+    both put their extra action on down with the handler on BTN_UP. Neither
+    had been pressed on a board. All 342 assertions in
+    tools/check_nav_labels.py passed.
+
+    It has a sixth rule now. A labelled side slot must have its pin named
+    somewhere in the enclosing namespace, whatever reads it, because there
+    are four spellings in this tree and enumerating them reported eleven of
+    ducky's working buttons as dead. Namespace scope and not file scope:
+    utils.cpp reads BTN_UP in an unrelated function a thousand lines away,
+    and a file-level test passes the exact bug the rule was written for.
+
+
 0.4.44 - 2026-10-07
 -------------------
 

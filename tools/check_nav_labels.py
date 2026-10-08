@@ -47,6 +47,16 @@ Four rules, one per way this has actually broken:
      tree's idiom for a full repaint, and the one that hid the bug, because
      the call site says redraw(true) and never says fillScreen.
 
+  6. a labelled side slot has its pin wired to something. The slots are
+     positional, (left, down, center, up, right), while the handler names
+     its button, so a label can sit on one slot with the code reading
+     another. Two screens were written that way, Reset SD and the Freq
+     Analyser, both labelling "Reset"/"Rescan" on down with the handler on
+     BTN_UP: one labelled dead button, one live blank one, and the other 342
+     assertions here passed. Scoped to the enclosing named namespace,
+     because utils.cpp reads BTN_UP in an unrelated function 1,000 lines
+     away and a file-level test passes the bug it was written for.
+
 Reads source. Does not need a board.
 """
 import re
@@ -102,6 +112,55 @@ def line_of(src, pos):
     return src[:pos].count("\n") + 1
 
 
+LABEL_CALL = re.compile(r"setTouchNavLabels\s*\([^;]*?\)\s*;", re.S)
+
+
+def wired(scope, pin):
+    """Is this slot's pin used for anything besides being labelled?
+
+    Deliberately agnostic about how. There are at least four spellings in
+    this tree: isTouchNavButtonPressedEdge(BTN_RIGHT) directly,
+    isButtonPressed(BTN_DOWN), which tries the PCF8574 and falls through to
+    the nav bar, ducky's `static EdgeBtn ebDown{BTN_DOWN}` wrapper objects,
+    and waits like resetWaitNavRelease(BTN_LEFT). Enumerating the call shapes
+    got ducky's wrappers wrong and reported eleven working buttons as dead,
+    which is how a check teaches people to ignore it.
+
+    What the rule actually needs is narrower than "is it read": a labelled
+    slot whose pin is never named anywhere nearby is drifted, whatever the
+    mechanism. So the label calls are removed first, and then the question is
+    just whether the constant appears at all.
+    """
+    return re.search(r"\b%s\b" % pin, LABEL_CALL.sub(" ", scope)) is not None
+
+NAMESPACE = re.compile(r"^namespace\s+(\w+)\s*\{", re.M)
+
+
+def enclosing_namespace(src, pos):
+    """(text to search, True) for the named namespace around pos.
+
+    Falls back to (whole file, False) when there is none, which is the case
+    for the features that live at file scope. Braces are matched from the
+    namespace's opening one rather than trusting indentation.
+    """
+    best = None
+    for m in NAMESPACE.finditer(src):
+        if m.start() > pos:
+            break
+        i, depth = m.end() - 1, 0
+        while i < len(src):
+            if src[i] == "{":
+                depth += 1
+            elif src[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        if m.start() <= pos <= i:
+            best = src[m.start():i + 1]      # innermost wins
+    return (best, True) if best else (src, False)
+
+
 def main():
     sources = sorted(SKETCH.glob("*.cpp"))
     if not sources:
@@ -110,6 +169,8 @@ def main():
 
     checks = 0
     failures = []
+    # how many of rule 6's assertions were namespace-scoped vs file-wide
+    tight, loose = [0], [0]
 
     for path in sources:
         src = path.read_text(encoding="utf-8", errors="replace")
@@ -133,6 +194,40 @@ def main():
                 failures.append(
                     "%s: left says %r while the exit is the unlabelled centre"
                     % (where, left))
+
+            # Rule 6: a labelled side slot is a slot something reads.
+            #
+            # The slots are positional -- (left, down, center, up, right) --
+            # while the handler names its button, so a label can sit on one
+            # slot with the code reading another and nothing says they have
+            # drifted. Reset SD was written with "Rescan" on down and the
+            # handler on BTN_UP: Down was labelled and dead, Up was live and
+            # blank, and all 342 other assertions here passed. Same failure
+            # as rule 2 -- a button promising what it is not wired to -- on
+            # the side slots, and without needing the word "back" in it.
+            #
+            # Scoped to the enclosing named namespace, not the file. That is
+            # not fastidiousness: utils.cpp is 4,000 lines and reads BTN_UP in
+            # an unrelated function, so a file-level rule passes the exact bug
+            # it was written for. Features that sit at file scope, which is
+            # most of wifi.cpp, only get the file-level test, and the count
+            # below says how many of each ran.
+            scope, scoped = enclosing_namespace(src, m.start())
+            for slot, pin in ((0, "BTN_LEFT"), (1, "BTN_DOWN"),
+                              (3, "BTN_UP"), (4, "BTN_RIGHT")):
+                label = literal(args[slot])
+                if not label:
+                    continue          # nullptr, "" or computed: nothing shown
+                checks += 1
+                if scoped:
+                    tight[0] += 1
+                else:
+                    loose[0] += 1
+                if not wired(scope, pin):
+                    failures.append(
+                        "%s: %s slot says %r and nothing in %s reads %s"
+                        % (where, pin[4:].lower(), label,
+                           "that namespace" if scoped else "the file", pin))
 
         # Rule 3: whoever sets labels paints them somewhere.
         sets = [m for m in SET_LABELS.finditer(src)
@@ -191,6 +286,8 @@ def main():
 
     print("  ok    every centre slot is pressable, painted, and not cleared "
           "afterwards")
+    print("  ok    every labelled side slot has its pin wired to something "
+          "(%d within a namespace, %d file-wide)" % (tight[0], loose[0]))
     print("\n%d checks passed" % checks)
     return 0
 

@@ -678,8 +678,6 @@ double attenuation_num = 10;
 unsigned int sampling_period;
 unsigned long micro_s;
 
-double vRealSUB[samplesSUB];
-double vImagSUB[samplesSUB];
 
 byte red[ESP32DIV_FFT_PALETTE_SIZE], green[ESP32DIV_FFT_PALETTE_SIZE],
      blue[ESP32DIV_FFT_PALETTE_SIZE];
@@ -1210,8 +1208,8 @@ for (int i = 0; i < samplesSUB; i++) {
 
     ewmaRSSI = (ALPHA * rssi) + ((1 - ALPHA) * ewmaRSSI);
 
-    vRealSUB[i] = ewmaRSSI * 2;
-    vImagSUB[i] = 1;
+    pueoFftReal[i] = ewmaRSSI * 2;
+    pueoFftImag[i] = 1;
 
     while (micros() < micro_s + sampling_period);
     micro_s += sampling_period;
@@ -1220,23 +1218,23 @@ for (int i = 0; i < samplesSUB; i++) {
   double mean = 0;
 
   for (uint16_t i = 0; i < samplesSUB; i++)
-        mean += vRealSUB[i];
+        mean += pueoFftReal[i];
         mean /= samplesSUB;
   for (uint16_t i = 0; i < samplesSUB; i++)
-        vRealSUB[i] -= mean;
+        pueoFftReal[i] -= mean;
 
   micro_s = micros();
 
-  FFTSUB.Windowing(vRealSUB, samplesSUB, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-  FFTSUB.Compute(vRealSUB, vImagSUB, samplesSUB, FFT_FORWARD);
-  FFTSUB.ComplexToMagnitude(vRealSUB, vImagSUB, samplesSUB);
+  FFTSUB.Windowing(pueoFftReal, samplesSUB, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+  FFTSUB.Compute(pueoFftReal, pueoFftImag, samplesSUB, FFT_FORWARD);
+  FFTSUB.ComplexToMagnitude(pueoFftReal, pueoFftImag, samplesSUB);
 
 unsigned int left_x = 120;
 unsigned int graph_y_offset = kGraphYOffset;
 int max_k = 0;
 
 for (int j = 0; j < samplesSUB >> 1; j++) {
-    int k = vRealSUB[j] / attenuation_num;
+    int k = pueoFftReal[j] / attenuation_num;
     if (k > max_k)
         max_k = k;
     if (k > 127) k = 127;
@@ -1248,7 +1246,7 @@ for (int j = 0; j < samplesSUB >> 1; j++) {
 }
 
 for (int j = 0; j < samplesSUB >> 1; j++) {
-    int k = vRealSUB[j] / attenuation_num;
+    int k = pueoFftReal[j] / attenuation_num;
     if (k > max_k)
         max_k = k;
     if (k > 127) k = 127;
@@ -5377,7 +5375,9 @@ void setup() {
   if (!cc1101Ready("Freq Analyser")) return;
 
   setTouchButtonInputEnabled(true);
-  setTouchNavLabels("", "Reset", "Exit", "", "Hold");
+  /* Reset on the up slot, which is the one resetPeaks is wired to.
+   * The slots are positional: (left, down, center, up, right). */
+  setTouchNavLabels(nullptr, nullptr, "Exit", "Reset", "Hold");
 
   reclaimSharedSpiBus();
   SpiBus::claim(SpiBus::Dev::Cc1101);

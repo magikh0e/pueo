@@ -162,12 +162,13 @@ const char *subghz_submenu_items[subghz_NUM_SUBMENU_ITEMS] = {
  * whole tiles of an eight tile grid, both of them things nobody opens in the
  * middle of a session, sitting at the same visual weight as the radios. The
  * two slots they free are what RFID/NFC and GPS were promoted into. */
-const int tools_NUM_SUBMENU_ITEMS = 8;
+const int tools_NUM_SUBMENU_ITEMS = 9;
 const char *tools_submenu_items[tools_NUM_SUBMENU_ITEMS] = {
     "Serial Monitor",
     "Update Firmware",
     "Touch Calibrate",
     "SD File Manager",
+    "Reset SD",
     /* Next to the file manager rather than under WiFi. The radio is how it
      * works, not what it is for: somebody looking for a way to get a capture
      * off the card looks where the card is. */
@@ -302,6 +303,7 @@ const unsigned char *tools_submenu_icons[tools_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_follow,
     bitmap_icon_undo,
     bitmap_icon_sdcard,
+    bitmap_icon_sign_forbidden,
     bitmap_icon_wifi2,
     bitmap_icon_setting,
     bitmap_icon_question,
@@ -3398,10 +3400,11 @@ constexpr int TOOLS_IDX_TERMINAL = 0;
 constexpr int TOOLS_IDX_UPDATE   = 1;
 constexpr int TOOLS_IDX_TOUCH    = 2;
 constexpr int TOOLS_IDX_SD_FILES = 3;
-constexpr int TOOLS_IDX_XFER     = 4;
-constexpr int TOOLS_IDX_SETTINGS = 5;
-constexpr int TOOLS_IDX_ABOUT    = 6;
-constexpr int TOOLS_IDX_BACK     = 7;
+constexpr int TOOLS_IDX_SD_RESET = 4;
+constexpr int TOOLS_IDX_XFER     = 5;
+constexpr int TOOLS_IDX_SETTINGS = 6;
+constexpr int TOOLS_IDX_ABOUT    = 7;
+constexpr int TOOLS_IDX_BACK     = 8;
 
 static void runToolsFeatureExitCleanup() {
     in_sub_menu = true;
@@ -3480,6 +3483,9 @@ static void launchToolsFeature(int idx) {
             break;
         case TOOLS_IDX_SD_FILES:
             runToolsFeature(idx, SdFileManager::setup, SdFileManager::loop);
+            break;
+        case TOOLS_IDX_SD_RESET:
+            runToolsFeature(idx, SdReset::setup, SdReset::loop);
             break;
         case TOOLS_IDX_XFER:
             runToolsFeature(idx, FileServer::setup, FileServer::loop,

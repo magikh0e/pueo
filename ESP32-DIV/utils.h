@@ -163,6 +163,14 @@ namespace Terminal {
   void terminalLoop();
 }
 
+/* Wiping Pueo's own directories on the card. Never the card itself: the
+ * guard that enforces that lives in utils.cpp beside the recursive
+ * remove. */
+namespace SdReset {
+  void setup();
+  void loop();
+}
+
 namespace SdFileManager {
   void setup();
   void loop();

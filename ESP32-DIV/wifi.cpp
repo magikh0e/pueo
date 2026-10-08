@@ -467,8 +467,6 @@ double attenuation = 10;
 unsigned int sampling_period_us;
 unsigned long microseconds;
 
-double vReal[samples];
-double vImag[samples];
 
 byte palette_red[ESP32DIV_FFT_PALETTE_SIZE], palette_green[ESP32DIV_FFT_PALETTE_SIZE],
      palette_blue[ESP32DIV_FFT_PALETTE_SIZE];
@@ -498,8 +496,8 @@ void do_sampling_FFT() {
   microseconds = micros();
 
   for (int i = 0; i < samples; i++) {
-    vReal[i] = tmpPacketCounter * 300;
-    vImag[i] = 1;
+    pueoFftReal[i] = tmpPacketCounter * 300;
+    pueoFftImag[i] = 1;
     while (micros() - microseconds < sampling_period_us) {
 
     }
@@ -509,16 +507,16 @@ void do_sampling_FFT() {
   double mean = 0;
 
   for (uint16_t i = 0; i < samples; i++)
-    mean += vReal[i];
+    mean += pueoFftReal[i];
   mean /= samples;
   for (uint16_t i = 0; i < samples; i++)
-    vReal[i] -= mean;
+    pueoFftReal[i] -= mean;
 
   microseconds = micros();
 
-  FFT.Windowing(vReal, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
-  FFT.Compute(vReal, vImag, samples, FFT_FORWARD);
-  FFT.ComplexToMagnitude(vReal, vImag, samples);
+  FFT.Windowing(pueoFftReal, samples, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+  FFT.Compute(pueoFftReal, pueoFftImag, samples, FFT_FORWARD);
+  FFT.ComplexToMagnitude(pueoFftReal, pueoFftImag, samples);
 
   // Mirrored waterfall, drawn out from the centre line in both directions:
   // 128 bins each way, so it is (samples >> 1) * 2 wide whatever the panel is.
@@ -529,7 +527,7 @@ void do_sampling_FFT() {
   int max_k = 0;
 
   for (int j = 0; j < samples >> 1; j++) {
-    int k = vReal[j] / attenuation;
+    int k = pueoFftReal[j] / attenuation;
     if (k > max_k)
       max_k = k;
     if (k > 127) k = 127;
@@ -543,7 +541,7 @@ void do_sampling_FFT() {
   }
 
   for (int j = 0; j < samples >> 1; j++) {
-    int k = vReal[j] / attenuation;
+    int k = pueoFftReal[j] / attenuation;
     if (k > max_k)
       max_k = k;
     if (k > 127) k = 127;
@@ -564,7 +562,7 @@ void do_sampling_FFT() {
   tft.fillRect(area_graph_x_offset, area_graph_y_offset, (samples >> 1), area_graph_height, TFT_BLACK);
 
   for (int j = 0; j < samples >> 1; j++) {
-    int k = vReal[j] / attenuation;
+    int k = pueoFftReal[j] / attenuation;
     if (k > 127) k = 127;
 
     unsigned int color = palette_red[k] << 11 | palette_green[k] << 5 | palette_blue[k];
@@ -589,7 +587,7 @@ void do_sampling_FFT() {
   tft.fillRect((unsigned)area_graph_x_offset_flipped, area_graph_y_offset, area_graph_width, area_graph_height, TFT_BLACK);
 
   for (int j = 0; j < samples >> 1; j++) {
-    int k = vReal[j] / attenuation;
+    int k = pueoFftReal[j] / attenuation;
     if (k > 127) k = 127;
 
     unsigned int color = palette_red[k] << 11 | palette_green[k] << 5 | palette_blue[k];
