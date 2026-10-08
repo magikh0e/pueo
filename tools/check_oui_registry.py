@@ -90,8 +90,27 @@ def load_registry():
 def fetch():
     import urllib.request
     print("fetching %s" % URL)
-    with urllib.request.urlopen(URL, timeout=300) as r:
+    # A browser User-Agent, because the default one stopped working.
+    # standards-oui.ieee.org sits behind a filter that answers urllib's
+    # "Python-urllib/3.x" with HTTP 418, and curl with a rejection page that
+    # is served as 200, so the failure arrives either as an odd status or as
+    # 245 bytes of HTML where 3.8 MB of CSV should be. Both leave this check
+    # unable to run, which is the state it was found in: it is the one thing
+    # that consults the registry, and it had quietly become unusable.
+    req = urllib.request.Request(URL, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "text/csv,*/*",
+    })
+    with urllib.request.urlopen(req, timeout=300) as r:
         data = r.read()
+    # A filter page is small and starts with markup. Refuse it rather than
+    # caching it: a cache full of HTML fails every row for the wrong reason.
+    if len(data) < 1_000_000 or data.lstrip()[:1] == b"<":
+        raise SystemExit(
+            "the registry did not come back: %d bytes starting %r.\n"
+            "That is a filter page, not the CSV. Fetch it in a browser and "
+            "save it to %s if this persists."
+            % (len(data), data.lstrip()[:60], CACHE))
     CACHE.write_bytes(data)
     print("cached %d bytes at %s" % (len(data), CACHE))
 

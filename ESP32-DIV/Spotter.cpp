@@ -888,6 +888,7 @@ const char* kindText(Kind k) {
     case Kind::Pentest:   return "PENTEST";
     case Kind::Tracker:   return "TRACKER";
     case Kind::Mesh:      return "MESH";
+    case Kind::Acoustic:  return "ACOUSTIC";
     default:              return "?";
   }
 }
@@ -906,18 +907,18 @@ const char* kindText(Kind k) {
  *
  * One bit per Kind. Kind::Unknown is bit 0 and is never set by a signature,
  * so it costs a bit and saves an offset. */
-constexpr uint16_t kAllKinds = 0x03FF;     // ten Kind values, bits 0..9
+constexpr uint16_t kAllKinds = 0x07FF;     // eleven Kind values, bits 0..10
 uint16_t s_kindMask = kAllKinds;
 uint8_t  s_minConf  = 0;                   // 0 Weak and up, 1 Likely and up, 2 Strong
 bool     s_filtOpen = false;
-int      s_filtSel  = 0;                   // 0..8 kinds, 9 the confidence row
+int      s_filtSel  = 0;                   // 0..9 kinds, 10 the confidence row
 
 /* The kinds the filter offers, in the order they are drawn. Kind::Unknown is
  * not here: nothing in SpotterSignatures.h produces it, so a row for it
  * would be a control that does nothing. */
 const Kind kFiltKinds[] = {
-  Kind::Alpr, Kind::Bodycam, Kind::Camera, Kind::Tracker, Kind::Glasses,
-  Kind::Vehicle, Kind::Accessory, Kind::Pentest, Kind::Mesh,
+  Kind::Alpr, Kind::Bodycam, Kind::Camera, Kind::Acoustic, Kind::Tracker,
+  Kind::Glasses, Kind::Vehicle, Kind::Accessory, Kind::Pentest, Kind::Mesh,
 };
 constexpr int kFiltKindCount = (int)(sizeof(kFiltKinds) / sizeof(kFiltKinds[0]));
 constexpr int kFiltRows = kFiltKindCount + 1;   // + the confidence row
@@ -1224,8 +1225,8 @@ void drawHeader() {
 /* ── The filter screen ──────────────────────────────────────────────────── */
 /* The filter borrows the list's cache rather than keeping its own.
  *
- * It needs thirteen lines -- nine kinds, the confidence row, a title and two
- * of footer -- and a 13 x 44 array of its own costs 572 bytes of DRAM, which
+ * It needs fourteen lines -- ten kinds, the confidence row, a title and two
+ * of footer -- and a 14 x 44 array of its own costs 616 bytes of DRAM, which
  * this image does not have: adding one overflowed .dram0.bss by 456 bytes and
  * the link failed. DRAM is the scarce thing here and has been since the
  * WebServer had to go on the heap.
@@ -1234,7 +1235,7 @@ void drawHeader() {
  * them is drawing or the other is, never both -- and because clearBody()
  * wipes the cache on every transition between them, so neither can ever read
  * a line the other wrote. s_shownRow is 16 rows of 3, which is 48 slots for
- * the 13 this wants.
+ * the 14 this wants.
  *
  * FILT(n) is a slot, not a row: the filter does not care about the row/column
  * shape the list imposes on that array. */

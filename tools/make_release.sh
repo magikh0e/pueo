@@ -194,6 +194,8 @@ INCLUDE=(
   "tools/check_sd_paths.py"
   "tools/check_sd_reset.py"
   "tools/check_fft_scratch.py"
+  "tools/check_signatures_export.py"
+  "tools/extract_signatures.py"
   "tools/trace_logo.py"
   "tools/inline_logo.py"
   "tools/check_logo_scale.py"

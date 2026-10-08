@@ -159,12 +159,12 @@ watches for the Remote ID broadcasts drones are required to send.
 
 #### What Surveillance is looking at
 
-274 signatures across 9 kinds. A row appears when something in range
+283 signatures across 10 kinds. A row appears when something in range
 announces itself in a way one of them recognises.
 
 The useful thing to know is not the list of vendors, which goes stale, but
 the questions being asked, because that is what explains a row that is there
-and a row that is not. Eight questions over the nine tables, because a name
+and a row that is not. Eight questions over the ten tables, because a name
 matched from its first character is one question asked separately of a WiFi
 network and a BLE device:
 
@@ -232,7 +232,7 @@ is useful and it is narrower than *nothing is here*.
 
 #### Filtering the list
 
-The **left button** opens a filter. Toggle any of the nine kinds, and set a
+The **left button** opens a filter. Toggle any of the ten kinds, and set a
 confidence floor of everything, likely and up, or strong only.
 
 It is worth knowing exactly what it does and does not do.

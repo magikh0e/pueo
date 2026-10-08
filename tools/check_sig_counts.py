@@ -46,6 +46,9 @@ WORDS = {
     276: "two hundred and seventy-six", 277: "two hundred and seventy-seven",
     278: "two hundred and seventy-eight", 279: "two hundred and seventy-nine",
     280: "two hundred and eighty",
+    281: "two hundred and eighty-one", 282: "two hundred and eighty-two",
+    283: "two hundred and eighty-three", 284: "two hundred and eighty-four",
+    285: "two hundred and eighty-five",
 }
 
 CHECKS = 0

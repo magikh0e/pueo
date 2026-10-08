@@ -76,8 +76,14 @@
 
 namespace Spotter {
 
+/* Acoustic is gunshot detection: ShotSpotter and Flock's Raven. It exists
+ * because both were filed under Alpr, which told somebody standing under a
+ * microphone array that their number plate was being read. Neither is a
+ * camera and neither is an accessory to one, so there was nowhere honest to
+ * put them. */
 enum class Kind : uint8_t { Unknown = 0, Alpr, Glasses, Bodycam, Accessory,
-                            Vehicle, Camera, Pentest, Tracker, Mesh };
+                            Vehicle, Camera, Pentest, Tracker, Mesh,
+                            Acoustic };
 
 /* How much a single match is worth. Corroboration -- a second, differently
  * labelled signature on the same MAC -- promotes Likely to Strong. It does
@@ -254,8 +260,14 @@ static const OuiSig kOuiSigs[] = {
   /* Vendor-own IEEE blocks, so Strong, which also allows them on the BLE
    * path. See the note at the head of this table. */
   {{0x00, 0x0E, 0xA5}, Kind::Alpr, Conf::Strong,  "BLIP Systems"},
+  /* Gatsometer and Redflex build speed and red-light enforcement cameras
+   * and nothing else. Alpr rather than Camera: these read a plate to decide
+   * whether to record, which is the claim Kind::Alpr makes, and filing them
+   * as a fixed camera would put them next to a doorbell. */
+  {{0x00, 0x18, 0x29}, Kind::Alpr, Conf::Strong,  "Gatsometer"},
+  {{0x00, 0x30, 0x7E}, Kind::Alpr, Conf::Strong,  "Redflex"},
   {{0x00, 0x14, 0x7B}, Kind::Alpr, Conf::Strong,  "Iteris (BlueTOAD)"},
-  {{0xD4, 0x11, 0xD6}, Kind::Alpr, Conf::Strong,  "ShotSpotter"},
+  {{0xD4, 0x11, 0xD6}, Kind::Acoustic, Conf::Strong, "ShotSpotter"},
 
   /* Uniview, five blocks. Commercial CCTV that also turns up on poles. */
   {{0x14, 0xBA, 0x88}, Kind::Camera, Conf::Strong, "Uniview"},
@@ -265,7 +277,32 @@ static const OuiSig kOuiSigs[] = {
   {{0xC4, 0x79, 0x05}, Kind::Camera, Conf::Strong, "Uniview"},
 
   /* ── Body-worn and in-car video ──────────────────────────────────────── */
+  /* All vendor-own MA-L blocks, all checked against the IEEE registry, and
+   * all companies that make police video and sell it to agencies rather
+   * than to consumers, which is what GRADING.md asks of a Strong row.
+   *
+   * Utility, Inc. makes the BodyWorn line. Its two blocks were Accessory,
+   * the kind a charging dock gets, and sat under the in-car-boxes comment
+   * below until this section gained some company. */
   {{0x00, 0x23, 0xBD}, Kind::Bodycam, Conf::Strong, "Digital Ally"},
+  {{0x00, 0x09, 0xBC}, Kind::Bodycam, Conf::Strong, "Utility BodyWorn"},
+  {{0x00, 0x16, 0xED}, Kind::Bodycam, Conf::Strong, "Utility BodyWorn"},
+  {{0x00, 0x1D, 0x96}, Kind::Bodycam, Conf::Strong, "WatchGuard Video"},
+  {{0xFC, 0x01, 0x9E}, Kind::Bodycam, Conf::Strong, "VIEVU"},
+  {{0x48, 0x46, 0x8D}, Kind::Bodycam, Conf::Strong, "Zepcam"},
+  {{0x00, 0x1B, 0xBE}, Kind::Bodycam, Conf::Strong, "ICOP Digital"},
+  {{0x00, 0x1C, 0x3F}, Kind::Bodycam, Conf::Strong, "Intl Police Tech"},
+
+  /* ── Police vehicle equipment ────────────────────────────────────────── */
+  /* Patrol Products Consortium is light bars, consoles and the rest of a
+   * patrol car's upfit, which is one kind of thing sold to one kind of
+   * buyer, so Strong.
+   *
+   * Decatur Electronics is Likely rather than Strong because the same
+   * company's radar is sold into sports timing and traffic surveys as well
+   * as to police, so the block says radar and not whose. */
+  {{0x38, 0x43, 0x69}, Kind::Vehicle, Conf::Strong, "Patrol upfit (PPC)"},
+  {{0x6C, 0x18, 0x11}, Kind::Vehicle, Conf::Likely, "Decatur radar"},
 
   /* ── The boxes that sit in the car with them ─────────────────────────── */
   /* Not cameras, so Kind::Accessory rather than a camera kind: a fleet
@@ -280,8 +317,6 @@ static const OuiSig kOuiSigs[] = {
   {{0x64, 0xCE, 0x6E}, Kind::Accessory, Conf::Strong, "Sierra AirLink"},
   {{0x84, 0xDB, 0x2F}, Kind::Accessory, Conf::Strong, "Sierra AirLink"},
   {{0xCC, 0x93, 0x4A}, Kind::Accessory, Conf::Strong, "Sierra AirLink"},
-  {{0x00, 0x09, 0xBC}, Kind::Accessory, Conf::Strong, "Utility Inc"},
-  {{0x00, 0x16, 0xED}, Kind::Accessory, Conf::Strong, "Utility Inc"},
 
   /* Weak, and for the reason the Liteon blocks above are weak: the hardware
    * is not exclusive to the use. Novatel's prefix is also on consumer MiFi
@@ -291,14 +326,22 @@ static const OuiSig kOuiSigs[] = {
   {{0x00, 0x80, 0x48}, Kind::Accessory, Conf::Weak,   "Compex (shared board?)"},
   {{0x04, 0xF0, 0x21}, Kind::Accessory, Conf::Weak,   "Compex (shared board?)"},
 
-  /* Flock-family pole batteries. Weak on the OUI because the name is the
-   * stronger signal here, and kNameInSigs is what carries it. */
-  {{0x04, 0x0D, 0x84}, Kind::Accessory, Conf::Weak,   "FS battery?"},
-  {{0x1C, 0x34, 0xF1}, Kind::Accessory, Conf::Weak,   "FS battery?"},
-  {{0x38, 0x5B, 0x44}, Kind::Accessory, Conf::Weak,   "FS battery?"},
-  {{0x94, 0x34, 0x69}, Kind::Accessory, Conf::Weak,   "FS battery?"},
-  {{0xB4, 0xE3, 0xF9}, Kind::Accessory, Conf::Weak,   "FS battery?"},
-  {{0xF0, 0x82, 0xC0}, Kind::Accessory, Conf::Weak,   "FS battery?"},
+  /* Six more Silicon Laboratories blocks, seen on Flock poles. They said
+   * "FS battery?" and were Kind::Accessory, which asserted a product the
+   * registry does not support: all six are registered to Silicon
+   * Laboratories, the same registrant as the three SiLabs rows further
+   * down, and the two groups were telling different stories about the same
+   * company's chips. They say the same thing now.
+   *
+   * Still Weak, for the reason that was already here: the name is the
+   * stronger signal and kNameInSigs carries it. A Silicon Labs block is in
+   * a great many thermostats and door sensors too. */
+  {{0x04, 0x0D, 0x84}, Kind::Alpr, Conf::Weak,   "SiLabs (ALPR?)"},
+  {{0x1C, 0x34, 0xF1}, Kind::Alpr, Conf::Weak,   "SiLabs (ALPR?)"},
+  {{0x38, 0x5B, 0x44}, Kind::Alpr, Conf::Weak,   "SiLabs (ALPR?)"},
+  {{0x94, 0x34, 0x69}, Kind::Alpr, Conf::Weak,   "SiLabs (ALPR?)"},
+  {{0xB4, 0xE3, 0xF9}, Kind::Alpr, Conf::Weak,   "SiLabs (ALPR?)"},
+  {{0xF0, 0x82, 0xC0}, Kind::Alpr, Conf::Weak,   "SiLabs (ALPR?)"},
 
   /* ── Fixed home cameras ──────────────────────────────────────────────── */
   {{0x48, 0x62, 0x64}, Kind::Camera, Conf::Strong, "Arlo"},
@@ -377,15 +420,23 @@ static const OuiSig kOuiSigs[] = {
    * handheld radio than a camera. Genetec is narrower but still sells VMS and
    * access control alongside AutoVu.
    *
+   * Which is why Motorola is Kind::Vehicle and Genetec is not. That sentence
+   * about the handheld radio sat above five Kind::Alpr rows for a long time:
+   * the doubt went into the confidence and the category kept saying plate
+   * reader, and a Likely ALPR still reads as a plate reader to the person
+   * holding the screen. Vehicle is the nearest honest kind here for in-car
+   * and public-safety radio gear. If more of it is ever added, that is the
+   * point to give it a kind of its own rather than widen this one.
+   *
    * Strong is also what reaches the BLE path, so promoting these would widen
    * BLE matching on the strength of a guess about which product it is.
    * Corroboration still gets them there: a Motorola block plus an ALPR
    * network name on the same address promotes to Strong on its own. */
-  {{0x00, 0x04, 0x7D}, Kind::Alpr, Conf::Likely,  "Motorola Solutions"},
-  {{0x00, 0x18, 0x85}, Kind::Alpr, Conf::Likely,  "Motorola Solutions"},
-  {{0x00, 0x1F, 0x92}, Kind::Alpr, Conf::Likely,  "Motorola Solutions"},
-  {{0x4C, 0xCC, 0x34}, Kind::Alpr, Conf::Likely,  "Motorola Solutions"},
-  {{0xB8, 0xE2, 0x8C}, Kind::Alpr, Conf::Likely,  "Motorola Malaysia"},
+  {{0x00, 0x04, 0x7D}, Kind::Vehicle, Conf::Likely, "Motorola Solutions"},
+  {{0x00, 0x18, 0x85}, Kind::Vehicle, Conf::Likely, "Motorola Solutions"},
+  {{0x00, 0x1F, 0x92}, Kind::Vehicle, Conf::Likely, "Motorola Solutions"},
+  {{0x4C, 0xCC, 0x34}, Kind::Vehicle, Conf::Likely, "Motorola Solutions"},
+  {{0xB8, 0xE2, 0x8C}, Kind::Vehicle, Conf::Likely, "Motorola Malaysia"},
   {{0x00, 0xBF, 0x15}, Kind::Alpr, Conf::Likely,  "Genetec"},
   {{0x0C, 0xBF, 0x15}, Kind::Alpr, Conf::Likely,  "Genetec"},
 
@@ -686,9 +737,9 @@ static const BleSig kBleSigs[] = {
   {0x0000, 0x3082, Kind::Pentest, Conf::Likely, "Flipper Zero (white)"},
   {0x0000, 0x3083, Kind::Pentest, Conf::Likely, "Flipper Zero (clear)"},
 
-  {0x0000, 0x3100, Kind::Alpr, Conf::Weak, "Raven GATT 3100"},
-  {0x0000, 0x3101, Kind::Alpr, Conf::Weak, "Raven GATT 3101"},
-  {0x0000, 0x3102, Kind::Alpr, Conf::Weak, "Raven GATT 3102"},
+  {0x0000, 0x3100, Kind::Acoustic, Conf::Weak, "Raven GATT 3100"},
+  {0x0000, 0x3101, Kind::Acoustic, Conf::Weak, "Raven GATT 3101"},
+  {0x0000, 0x3102, Kind::Acoustic, Conf::Weak, "Raven GATT 3102"},
 };
 
 /* ── BLE: advertised names ───────────────────────────────────────────────── */
@@ -864,9 +915,9 @@ static const NameInSig kNameInSigs[] = {
   /* ── Intersection and pole cameras ───────────────────────────────────── */
   {"Miovision",      0, Kind::Alpr,   Conf::Strong, "Miovision"},
   {"Pigvision",      0, Kind::Camera, Conf::Strong, "Pigvision"},
-  {"ShotSpotter",    0, Kind::Alpr,   Conf::Strong, "ShotSpotter"},
-  {"Shot Spotter",   0, Kind::Alpr,   Conf::Strong, "ShotSpotter"},
-  {"SoundThinking",  0, Kind::Alpr,   Conf::Strong, "SoundThinking"},
+  {"ShotSpotter",    0, Kind::Acoustic, Conf::Strong, "ShotSpotter"},
+  {"Shot Spotter",   0, Kind::Acoustic, Conf::Strong, "ShotSpotter"},
+  {"SoundThinking",  0, Kind::Acoustic, Conf::Strong, "SoundThinking"},
 
   /* LiveView Technologies solar trailers. "LiveView" on its own is two
    * ordinary words, so the hyphenated forms carry the confidence. */

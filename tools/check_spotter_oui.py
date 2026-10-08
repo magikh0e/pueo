@@ -61,8 +61,24 @@ VENDOR_OWN = {
     "6C:F1:7E": "Uniview",
     "88:26:3F": "Uniview",
     "C4:79:05": "Uniview",
-    # body-worn and in-car video
+    # Traffic enforcement. Both make speed and red-light cameras and
+    # nothing else.
+    "00:18:29": "Gatsometer",
+    "00:30:7E": "Redflex Communication Systems",
+    # Body-worn and in-car video. Everything from Digital Ally down was
+    # checked against the IEEE registry rather than carried over from a
+    # catalog, unlike the 0.4.22 batch noted above: the candidates came from
+    # RF Sentinel's list and the registrant was read back for each one. A
+    # ninth of theirs, D8:1F:65, is deliberately absent, because they
+    # attribute it to Axon from the field and the registry says "Private".
     "00:23:BD": "Digital Ally",
+    "00:1D:96": "WatchGuard Video",
+    "FC:01:9E": "VIEVU",
+    "48:46:8D": "Zepcam B.V.",
+    "00:1B:BE": "ICOP Digital",
+    "00:1C:3F": "International Police Technologies",
+    # Patrol car upfit: light bars, consoles, the rest of the fit-out.
+    "38:43:69": "Patrol Products Consortium LLC",
     # the boxes that ride with them
     "00:30:44": "Cradlepoint",
     "00:E0:1C": "Cradlepoint",
