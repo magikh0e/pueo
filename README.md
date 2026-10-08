@@ -1,9 +1,8 @@
 <p align="center">
-  <img src="docs/img/pueo-header.webp" width="100%"
-       alt="The Pueo mark: a stylised horned owl in green on near-black, with
-            a WiFi arc, a Bluetooth rune and a satellite worked across its
-            chest and the word PUEO beneath, standing in a sweep of concentric
-            signal arcs.">
+  <img src="assets/logo-512.png" width="280"
+       alt="The Pueo badge: a neon-green circuit owl in a metallic multi-radio
+            shield, with WiFi/BLE arcs, antennae and sub-GHz, NFC and GPS
+            labels, under PUEO and MAGIKH0E — Multi-Radio Field Tool.">
 </p>
 
 # Pueo
