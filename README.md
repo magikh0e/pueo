@@ -2,7 +2,7 @@
   <img src="assets/logo-512.png" width="280"
        alt="The Pueo badge: a neon-green circuit owl in a metallic multi-radio
             shield, with WiFi/BLE arcs, antennae and sub-GHz, NFC and GPS
-            labels, under PUEO and MAGIKH0E — Multi-Radio Field Tool.">
+            labels, under PUEO and MAGIKH0E, Multi-Radio Field Tool.">
 </p>
 
 # Pueo
