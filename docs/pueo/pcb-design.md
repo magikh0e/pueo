@@ -1283,8 +1283,10 @@ manual, v1.20.
    covers.
 3. **Free a real pair** and drive both directly. The obvious candidates are
    gone: GPIO 4 is the RGB LED's red channel, and GPIO 0 is a strapping pin that
-   decides boot mode. The RGB LED gave up its three pins and UART0 gave up a
-   fourth, so this means J1 grows and something else moves. Second-spin work,
+   decides boot mode. The RGB LED gave up two of its three pins, 16 and 17;
+   the third repurposed pin is 25, which was free rather than taken from
+   anything, and UART0 gave up a fourth. So this means J1 grows and
+   something else moves. Second-spin work,
    with the pin budget reopened.
 
 **[verify] the direction of `GDO0` before trusting any of this.** Ebyte's pin

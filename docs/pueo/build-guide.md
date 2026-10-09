@@ -51,7 +51,8 @@ Two rails, from one 5 V bus:
 ```
   5 V ──┬── CYD onboard regulator ── 3.3 V ── ESP32, display, touch, SD
         │
-        └── separate buck ────────── +3V3_RF ── CC1101, NRF24, ATGM336H
+        └── separate buck ────────── +3V3_RF ── CC1101, NRF24, ATGM336H,
+                                               PN532
 ```
 
 Common ground between them, and **10 µF across the NRF24's supply pins at the
@@ -61,7 +62,13 @@ the wire between the two is an inductor.
 On the bench you can substitute a lab supply set to 3.3 V for the buck. What
 you cannot substitute is the separation.
 
-The PN532 runs from 5 V, not from either 3.3 V rail.
+**Nothing else hangs off the 5 V bus.** It exists because USB delivers 5 V
+and the CYD regulates it; every module in this build is on +3V3_RF. The
+PN532 is the one that invites a second rail, because the Elechouse V3 takes
+3.3 to 5 and carries a level shifter, but that shifter is for I2C and UART
+and this build uses SPI, which is 3.3 V TTL on that board. pcb-design.md
+deleted the 5 V stage on exactly this finding, so do not rebuild it for one
+module that does not need it.
 
 ## Parts
 
@@ -72,7 +79,7 @@ The PN532 runs from 5 V, not from either 3.3 V rail.
 | 2.4 GHz | NRF24L01+PA+LNA, board SMA |
 | NFC | PN532 V3, **SPI mode, DIP CH1=OFF, CH2=ON** |
 | GPS | ATGM336H, 9600 baud, IPEX with an active antenna |
-| Power | 1S LiPo, TP4056 with protection, MT3608 boost to 5 V, buck for +3V3_RF |
+| Power | 1S LiPo, TP4056 with protection, one S7V8F3 buck-boost for +3V3_RF |
 
 Antennas on both radios before power. A PA module transmitting into an open
 SMA is a module you replace.
@@ -581,8 +588,11 @@ exist at the same time. It returns when you leave the feature. This is
 inherent to the wiring, and the reasoning for choosing that pin over GPIO 3
 is in [hardware.md](hardware.md).
 
-**The RGB LED does nothing.** It is gone: GPIO 4, 16 and 17 are the NRF24's
-and the PN532's now.
+**The RGB LED does nothing.** Two of its three channels are gone: 16 is the
+NRF24's CE and 17 is the PN532's SS. **GPIO 4, the red channel, is used by
+nothing**, which is the one thing about this LED that is easy to get wrong,
+because the obvious guess is that three repurposed pads means three
+channels. CSN is on 25 instead, for the reason the next paragraph gives.
 
 This paragraph used to say the red channel was GPIO 22 here, so the LED would
 flicker with sub-GHz traffic rather than go dark. That is lcdwiki's E32R35T.
