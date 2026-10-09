@@ -175,138 +175,193 @@ pinout has not been confirmed against a part in hand, and it is marked
 names at the other end of cable A are the unverified half, so read them off
 the module before you trust the order.
 
+## The stages
+
+Five, in the order that makes each failure attributable to the thing you
+just did. Run the check at the end of a stage before starting the next one:
+the whole reason for the order is that a shared bus turns one bad joint into
+four dead modules.
+
+| # | stage | what it needs | what it proves |
+|---|---|---|---|
+| **0** | [Meter](#stage-0-the-meter-before-anything-is-connected) | a multimeter | rails, ground and polarity, while nothing can be damaged |
+| **1** | [Bare board](#stage-1-the-bare-board-no-cables) | USB-C only | panel, touch, card, and every WiFi feature |
+| **2** | [GPS](#stage-2-gps-which-needs-no-soldering-at-all) | one cable, 1 kΩ | the UART, without touching the bus |
+| **3** | [CC1101](#stage-3-the-cc1101-with-the-bus-tapped-rather-than-soldered) | cable, SD breakout | the SPI bus and sub-GHz, still no iron |
+| **4** | [NRF24 and PN532](#stage-4-nrf24-and-pn532-which-need-the-iron) | iron, 30 AWG, flux | the six joints, bus first so it stays attributable |
+
+---
+
 ## Stage 0: the meter, before anything is connected
 
-The only step here that prevents damage rather than detecting it, which is
-why it goes first. It takes a minute.
+**Why this stage.** It is the only one that prevents damage rather than
+detecting it. Nothing is attached yet, so nothing is at risk while you do
+it, and it takes a minute.
 
-- **Set your rails and measure them, unloaded.** Anything adjustable ships
-  at an arbitrary setting, and a boost module will happily deliver 28 V
-  into a part expecting 3.3. Measure before a module is on the end of it,
-  not after.
-- **Confirm a common ground** between whatever is supplying the modules and
-  the CYD. Two supplies with no ground in common is the other way to lose
-  a module.
-- **If a cell is involved, beep BAT1 for polarity before plugging it in.**
-  Use a known ground such as `CN1` pin 1. BAT1 is covered at length in
-  [hardware.md](hardware.md) and is the one connector here that punishes a
-  guess.
+**Do this**
 
-Nothing is attached yet, so nothing is at risk while you do this.
+1. **Set every adjustable rail and measure it unloaded.** Anything with a
+   trimpot ships at an arbitrary setting, and a boost module will happily
+   deliver 28 V into a part expecting 3.3.
+2. **Confirm a common ground** between whatever supplies the modules and
+   the CYD.
+3. **If a cell is involved, beep BAT1 for polarity** against a known ground
+   such as `CN1` pin 1, before it goes anywhere near a cell.
+
+**It worked if** both rails read what you set them to with nothing drawing,
+and BAT1's polarity is what you expected rather than what you assumed.
+
+**Why each one.** Measure before a module is on the end of the supply, not
+after, because after is a destructive test. Two supplies with no ground in
+common is the other way to lose a module. BAT1 is covered at length in
+[hardware.md](hardware.md) and is the one connector here that punishes a
+guess.
+
+---
 
 ## Stage 1: the bare board, no cables
 
-Flash and boot with nothing attached.
+**Why this stage.** A known-good baseline. Everything after this adds a
+connection of yours, and you want to know the board was fine before any of
+them existed.
+
+**Do this**
 
 ```bash
 esptool.py --chip esp32 -b 921600 write_flash 0x0 pueo-0.4.47-merged.bin
 ```
 
-Display, backlight, touch, the menus and the SD card all work before you have
-introduced a single connection of your own. The WiFi features are fully
-testable here, because the ESP32's radio is on the die: the scanner, the
-packet monitor, Surveillance and Hunt need no module at all.
+Boot it with nothing attached.
 
-This is also where you find out that the panel is the one the firmware is
-built for. "Cheap yellow display" names at least four boards and a render of
-one is not a description of another.
+**It worked if** the display, backlight, touch, the menus and the SD card
+all work. The WiFi features work here too, with no module at all: the
+scanner, the packet monitor, Surveillance and Hunt all run off the ESP32's
+own radio.
+
+**If it did not**, suspect the board before the firmware. This is also
+where you find out whether the panel is the one the firmware is built for.
+"Cheap yellow display" names at least four boards, and a render of one is
+not a description of another.
+
+---
 
 ## Stage 2: GPS, which needs no soldering at all
 
-One cable, no joints, and the module either reports satellites or it does
-not. Power the GPS from a bench 3.3 V or from `CN1`'s 3.3 V pin, ground it
-common, and run its TX into `P1` pin 2 through the 1 kΩ resistor.
+**Why this stage.** One cable, no joints, and nothing touching the SPI bus.
+The module either reports satellites or it does not, so a failure here
+cannot be anything else.
+
+**Do this**
+
+1. Power the GPS from a bench 3.3 V or from `CN1`'s 3.3 V pin. **Not 5 V**:
+   the ATGM336H is 3.6 V absolute maximum.
+2. Ground it common with the CYD.
+3. Run its TX into `P1` pin 2 **through the 1 kΩ series resistor**.
+4. Attach the active antenna and give it sky.
+
+**It worked if** the module's own PPS LED starts blinking. Look for that
+before looking for a position: a cold start by a window can take several
+minutes, and indoors it may never fix.
 
 **The resistor is not optional.** GPIO 1 is UART0's transmit pin. The
-firmware releases it before the GPS feature reads on it, but the console owns
-it the rest of the time, so for most of the board's life the ESP32 and the
-GPS are both driving that net. The resistor is what makes that survivable.
+firmware releases it before the GPS feature reads on it, but the console
+owns it the rest of the time, so for most of the board's life the ESP32 and
+the GPS are both driving that net. The resistor is what makes that
+survivable.
 
-Expect no fix indoors. A cold start by a window can take several minutes, and
-the thing to look for first is the module's own PPS LED, not a position.
+---
 
 ## Stage 3: the CC1101, with the bus tapped rather than soldered
 
-The radio needs the three SPI lines, and those are pads. There is one way to
-reach them without an iron: put something in the card slot that brings the
-card's own contacts out where a jumper can reach them. CLK, DI and DO on
-those contacts are GPIO 18, 23 and 19.
+**Why this stage.** It proves the SPI bus and a radio on it without a
+single joint, which means that if stage 4 then breaks, the bus was not the
+thing that changed.
 
-**Buy the part rather than improvising one.** Two kinds work and they are
-not the same thing:
+**Do this**
+
+1. Put a **microSD breakout** in the card slot to bring CLK, DI and DO out
+   where a jumper reaches them. Those are GPIO 18, 23 and 19.
+2. Plug **cable A** into `P3`.
+3. Power the module from your 3.3 V rail, not from the CYD's.
+
+**Buy the breakout rather than improvising one.** Two kinds work:
 
 | part | what it gives you | notes |
 |---|---|---|
-| **microSD to DIP breakout** | the contacts on 2.54 mm pins | the easy one. Female Dupont jumpers push straight on, and there is nothing to solder |
-| **microSD "sniffer" / interposer** | a card-shaped PCB with a pad or pin row | made for logic-analyser work. Also fine, and thinner |
+| **microSD to DIP breakout** | the contacts on 2.54 mm pins | the easy one. Female Dupont jumpers push straight on, nothing to solder |
+| **microSD sniffer / interposer** | a card-shaped PCB with a pad or pin row | made for logic-analyser work. Also fine, and thinner |
 
-What is miserable is the obvious-looking third option, a **flexible
-extender cable**, where the contacts arrive as a naked ribbon with no
-terminal on them. Soldering jumpers to that ribbon is fiddly, the pitch is
-under a millimetre, and adjacent shorts are easy and not obvious. The whole
-point of this stage is avoiding the iron, so do not start it by soldering
-something harder than the joints you were trying to defer.
+The obvious-looking third option is the miserable one: a **flexible
+extender cable** brings the contacts out as a naked ribbon with no terminal
+on them, at under a millimetre of pitch. Adjacent shorts are easy and are
+not obvious. The point of this stage is avoiding the iron, so do not open
+it by soldering something harder than the joints you were deferring.
 
-This is a bench trick and not a build step. Two conditions on it:
+**It worked if** `SubGHz > Freq Analyser` shows a key fob taking the bright
+bar when you press one nearby. That is the fastest confirmation because it
+only needs tune-and-read. **Saved Profile** opens without a radio and sends
+with one. **Replay Attack** and the jammer transmit, so mind what is nearby.
 
-- **The card slot is occupied while you do this**, so anything that writes to
-  the card is off the table: Spotter's capture log, the wardriver, the pcap
-  writer, and `.sub` import and export. Test the radio here and the card
-  separately.
-- **It is a stub on a shared bus.** Keep it short. At the clock the CC1101
-  runs this is fine; it is not a way to run the whole build.
+**If every row sits at the floor** with a remote being pressed in front of
+it, suspect cable A's pin 2 and pin 3 before the module. IO35 and IO22
+swapped gives a radio that is detected and never reports anything, because
+GPIO 35 is input-only and correct only for GDO2.
 
-Do not *solder* to the card slot. Earlier versions of the build guide sent
-people there for SCK, MOSI and MISO, and the slot still has to work
-afterwards.
+**Two conditions on the tap.** The card slot is occupied while you do this,
+so anything that writes to the card is off the table: Spotter's capture
+log, the wardriver, the pcap writer, `.sub` import and export. Test the
+radio here and the card separately. And it is a stub on a shared bus, so
+keep it short; at the clock the CC1101 runs that is fine, but it is not a
+way to run the whole build. **Do not solder to the card slot.** Earlier
+versions of the build guide sent people there, and the slot still has to
+work afterwards.
 
-With cable A on P3 and the bus tapped, these should work:
-
-- **SubGHz > Freq Analyser.** The fastest confirmation that the radio is
-  alive, because it needs only tune-and-read. Press a key fob nearby and its
-  frequency should take the bright bar.
-- **Saved Profile**, which opens without a radio and sends with one.
-- **Replay Attack** and the jammer, which transmit, so mind what is nearby.
-
-If the analyser shows every row at the floor with a remote being pressed in
-front of it, suspect cable A's pin 2 and pin 3 before suspecting the module:
-IO35 and IO22 swapped gives a radio that is detected and never reports
-anything, because GPIO 35 is input-only and correct only for GDO2.
+---
 
 ## Stage 4: NRF24 and PN532, which need the iron
 
-There is no connector route to `NRF24 CSN` (25), `NRF24 CE` (16) or
-`PN532_SS` (17). Three wires onto pads, plus the shared bus, which by this
-point you may as well solder properly rather than extend the card-slot trick.
+**Why this stage.** Six joints, and the three bus ones are the joints whose
+failure is hardest to attribute, because a bad one takes out every device
+at once. Doing them first, and grading them on their own, is what keeps the
+rest of the stage debuggable.
 
-**Solder the three bus wires first and let a microSD card grade them.** SCK,
-MOSI and MISO are the joints whose failure is hardest to attribute, because
-a bad one takes out every device at once and looks like a dead module. The
-card uses exactly those three lines, so putting one in and seeing it mount
-tests all three at speed, which no meter reading does. It also tells you
-that you have not bridged anything onto `SD_CS`, which is GPIO 5.
+**Do this, in this order**
 
-Do that before the NRF24 and the PN532 go on. If the card mounts, the bus
-is sound and anything that fails afterwards is the module or its own chip
-select, which is a much smaller thing to look for.
+1. **Solder SCK, MOSI and MISO** to the module pads, and **put a microSD
+   card in the slot**. If it mounts, all three joints are sound.
+2. **Solder `NRF24 CE`** to the RGB LED's **blue** pad (16), and
+   **`PN532_SS`** to the **green** one (17).
+3. **Solder `NRF24 CSN` to 25**, which is **not** an RGB pad and has to be
+   found on the silkscreen.
+4. Power both modules from your 3.3 V rail, with **10 µF at the NRF24's own
+   supply pins**.
 
-Of the three remaining pads, **only two are RGB LED channels**: CE is the
-blue one and `PN532_SS` is the green. `NRF24 CSN` is GPIO 25 and has to be
-found on the silkscreen. Soldering CSN to the red channel puts it on GPIO 4
-and the radio never answers.
+**It worked if** the card still mounts after step 1, then the channel
+scanner shows a populated 2.4 GHz band, and the NFC reader answers.
 
-At that point you are doing the build in [build-guide.md](build-guide.md).
-Read [**Soldering to a
-castellation**](build-guide.md#soldering-to-a-castellation) before the first
-joint rather than after the third. It is four things, and each is there
-because skipping it costs a pad:
+**Why the card first.** It uses exactly the three lines you just soldered,
+so it tests all three at speed, which no meter reading does, and it shows
+you have not bridged anything onto `SD_CS`, which is GPIO 5. Once it
+mounts, the bus is sound and anything failing afterwards is a module or its
+own chip select, which is a much smaller thing to look for.
 
-- **Gel flux on the pad before the iron.** Not optional and not the same as
-  the rosin core in the solder.
+**The CSN pad is the trap.** Only two of the three are RGB channels.
+Soldering CSN to the red channel puts it on GPIO 4 and the radio never
+answers, and the symptom is indistinguishable from a dead module.
+
+**Read this before the first joint**, not after the third. From
+[**Soldering to a
+castellation**](build-guide.md#soldering-to-a-castellation), four things,
+each there because skipping it costs a pad:
+
+- **Gel flux on the pad before the iron.** Not optional, and not the same
+  as the rosin core in the solder.
 - **A 1.0 to 1.6 mm chisel tip**, not a needle point.
 - **Use the solder already on the castellation** rather than adding a blob.
-- **Tape the wire down** before soldering it. 30 AWG on a castellation has
-  no mechanical strength of its own and the joint fails later, not now.
+- **Tape the wire down** first. 30 AWG on a castellation has no mechanical
+  strength of its own, and the joint fails later rather than now.
+
+---
 
 ## What this does not prove
 
