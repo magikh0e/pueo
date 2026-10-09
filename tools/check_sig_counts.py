@@ -187,10 +187,11 @@ def main():
     ok("the guide's count of questions matches its table",
        re.search(r"\b%s questions over the %s tables\b"
                  % (qwords.get(nq, str(nq)),
-                    {9: "nine", 10: "ten", 11: "eleven"}.get(nkinds, str(nkinds))),
+                    {8: "eight", 9: "nine", 10: "ten",
+                     11: "eleven"}.get(len(tables), str(len(tables)))),
                  guide, re.I) is not None,
        "the table has %d rows over %d tables; the sentence above it does not "
-       "say so" % (nq, nkinds))
+       "say so" % (nq, len(tables)))
 
     for name in sorted(tables):
         phrase = DESCRIBED.get(name)

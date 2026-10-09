@@ -5,10 +5,12 @@ Open-source firmware for a handheld multi-radio field tool built on a
 an NRF24L01+PA+LNA for 2.4 GHz, a PN532 for NFC and an ATGM336H for GPS, in
 a printed enclosure zoned to keep the radios apart.
 
-Two panels, one flash image each. The 3.5" ESP32-3248S035R is the reference
-board. The one this has run on, the one with a dimensioned enclosure, and
-the one that brings its SPI bus out on a connector rather than asking for
-three joints on a microSD slot.
+One panel. The 3.5" ESP32-3248S035R is the reference board, the one this
+has run on and the one with a dimensioned enclosure. It does not break out
+the SPI bus, so six of the ten signals get soldered to the ESP-WROOM-32
+module's own castellations rather than to the microSD slot they share a net
+with; what put it ahead of the 2.8" was that all three CC1101 control lines
+land on one 4-pin connector rather than two.
 
 The 2.8" ESP32-2432S028R was supported up to 0.4.13 and is not any more. It
 was built every release and never booted, so what was published for it was an
