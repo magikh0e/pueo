@@ -531,13 +531,20 @@ not on a header, and it is free here only because this board's touch
 controller shares the display's SPI rather than taking a bus of its own, so
 it still needs finding on the silkscreen.
 
-**5. NRF24.** CSN and CE to the RGB LED pads, power from +3V3_RF, and the
-10 µF at the module. The channel scanner should show a populated 2.4 GHz
+**5. NRF24.** CE to the RGB LED's blue pad and **CSN to 25, which is not an
+RGB pad**, power from +3V3_RF, and the 10 µF at the module. Only two of the
+three repurposed pads are RGB channels, and CSN is not one of them: see the
+paragraph above, which is there because 25 has to be found on the
+silkscreen. Soldering CSN to the red channel puts it on GPIO 4 and the
+module never answers. The channel scanner should show a populated 2.4 GHz
 band in any occupied building; a flat sweep means the module is not answering
 on the bus.
 
-**6. PN532.** SS to the last RGB LED pad, power from 5 V. **Set the DIP
-switches to SPI before wiring it**: CH1=OFF, CH2=ON. In the wrong mode the
+**6. PN532.** SS to the last RGB LED pad, the green one, power from
+**+3V3_RF**. Not 5 V: the Elechouse V3 takes 3.3 to 5 and runs happily at
+3.3, which is why pcb-design.md deleted the 5 V stage rather than keeping a
+rail for one module. **Set the DIP switches to SPI before wiring it**:
+CH1=OFF, CH2=ON. In the wrong mode the
 module is silent and looks like a bad joint.
 
 **7. GPS.** One signal, module TX to GPIO 1, plus power from +3V3_RF and an

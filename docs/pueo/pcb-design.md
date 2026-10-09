@@ -951,6 +951,16 @@ cutting the CC1101 gap to 2.5 mm, which is a bad trade. Centred is better.
 This leaves 28 x 27 of floor free at the old position, next to the battery.
 Nothing needs it yet.
 
+A second pairing, not addressed anywhere until now: the **ESP32's own
+antenna against the NRF24's**. Both are 2.4 GHz, the ESP32 transmits, and
+the NRF24 PA/LNA is built to hear weak signals, so WiFi or BLE activity
+should be expected to deafen it while it runs. The board cannot fix that by
+layout alone, since the ESP32's antenna is on the CYD and the NRF24's is on
+a bulkhead; it is an enclosure decision about distance and about mounting
+the two at right angles rather than parallel. Unmeasured, because the NRF24
+has never been wired. Noted in bench-build.md as the first thing to check
+when it is.
+
 One thing the move does not fix: the antenna still ends up between the two
 SMA bulkheads, so a -130 dBm L1 receiver sits between a 433 MHz transmitter
 and a 2.4 GHz PA. The pigtail means it *could* go elsewhere, flat against
