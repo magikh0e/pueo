@@ -36,6 +36,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
+PUBLISH = ROOT / ".publish.local"
 
 DOCS = sorted((ROOT / "docs" / "pueo").glob("*.md"))
 DOCS += [ROOT / n for n in ("README.md", "PUEO.md", "CONTRIBUTING.md")]
@@ -58,6 +59,27 @@ def ok(name, cond, detail=""):
     else:
         print("  FAIL  %s%s" % (name, ("  -- " + detail) if detail else ""))
         FAILED.append(name)
+
+
+
+def site_index():
+    """index.html, if the site is on this machine.
+
+    Same lookup as check_sig_counts.py and make_release.sh, so there is
+    one place that knows where the site is. None when it is not here,
+    which is the case inside pueo-<version>-src.zip.
+    """
+    if not PUBLISH.is_file():
+        return None
+    m = re.search(r"PUEO_PUBLISH_DIR\s*=\s*['\"]?([^'\"\n]+)",
+                  PUBLISH.read_text(encoding="utf-8", errors="replace"))
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    if re.match(r"^/[a-zA-Z]/", raw):
+        raw = raw[1] + ":" + raw[2:]
+    p = Path(raw) / "index.html"
+    return p if p.is_file() else None
 
 
 def claims():
@@ -154,6 +176,21 @@ def main():
             ok(name, False, "the script printed no total, so nothing to compare")
             continue
         ok(name, got == claimed, "it runs %d" % got)
+
+    print()
+    page = site_index()
+    if page is None:
+        print("the site is not reachable; skipping its script count")
+    else:
+        n = len(sorted(TOOLS.glob("check_*.py")))
+        html = page.read_text(encoding="utf-8", errors="replace")
+        m = re.search(r">(\d+)</span>\s*host check scripts", html)
+        if m is None:
+            ok("index.html states the script count", False,
+               "no sentence of the form 'N host check scripts' on the page")
+        else:
+            ok("index.html says %d host check scripts" % n,
+               int(m.group(1)) == n, "it says %s" % m.group(1))
 
     print()
     if FAILED:

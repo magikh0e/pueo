@@ -55,6 +55,25 @@ CHECKS = 0
 FAILED = []
 
 
+def spelling_re(word):
+    """A spelling as a pattern, article and spacing allowed to vary.
+
+    index.html carried "A hundred and eight signatures" for months after
+    there were 283, with this script reading that page every release and
+    passing. WORDS says "one hundred and eight", the page said "A", and a
+    plain substring search went straight past it. One article was all it
+    took, so a leading "one" matches "a" as well.
+
+    Runs of whitespace match each other for the same kind of reason: a
+    sentence in HTML breaks where the column runs out rather than where
+    the words do, and this page split the old count across a line.
+    """
+    parts = word.split()
+    if parts[0] == "one":
+        parts[0] = "(?:one|a)"
+    return r"\s+".join(parts)
+
+
 def ok(name, cond, detail=""):
     global CHECKS
     CHECKS += 1
@@ -234,7 +253,7 @@ def main():
                        for p in pages)
         print("checking %d published pages" % len(pages))
         ok("the site states the count",
-           word and re.search(word, html, re.I) is not None,
+           word and re.search(spelling_re(word), html, re.I) is not None,
            "no page says %r" % word)
 
         # And the digits, which is the spelling firmware.html uses. A number
@@ -259,7 +278,8 @@ def main():
         # happily before a hyphen, so the check reported a page as carrying
         # two counts when it carried one.
         stale = [w for n, w in WORDS.items() if n != total
-                 and re.search(w + r"\b(?!\s+and\b|-)", html, re.I)]
+                 and re.search(spelling_re(w) + r"\b(?!\s+and\b|-)",
+                               html, re.I)]
         ok("  and no longer says an older one", not stale,
            "it also says %s, so one of the two is wrong" % stale)
 
