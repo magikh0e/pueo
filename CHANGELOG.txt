@@ -11,6 +11,48 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.47 - 2026-10-08
+-------------------
+
+  The beacon says which version it is over serial. It said it onto the
+  panel and nowhere else.
+
+  * A BOARD YOU COULD IDENTIFY BUT NOT DATE.
+
+    The bench transmitter printed "[beacon] start" and nothing more, with
+    its version on the TFT alone, so the only way to know what one was
+    running was to be looking at it. Over USB a board flashed weeks ago
+    read exactly like one flashed a minute ago.
+
+    That is worse here than it would be on the detector, because this board
+    exists to be the known-good half of a bench pair. A pair is only
+    known-good if both halves can be read, and this half could not be.
+
+    It now prints:
+
+        [beacon] start, bench transmitter 0.4.47
+
+    which settles both questions in one line, and uses the same words the
+    panel does rather than a second phrasing for the same thing.
+
+    The detector has printed its version since it had one. This is the
+    beacon catching up, not a new idea.
+
+  * WHY IT CAME UP.
+
+    Both boards arrive as a CH340 on the same COM port, so the port says
+    nothing about which is on the end of the cable. tools/build.sh carries
+    a note about a detector that was overwritten with the beacon image
+    exactly that way, and the fix there was to announce the role before
+    uploading. The banner is the other half of that: it already identified
+    the board, and now it dates it too.
+
+  Riding along, none of it reaching the device: the README carries the new
+  Pueo badge, its alt text lost an em dash that check_prose.py refuses, the
+  sentence listing the kinds in words gained the tenth one that 0.4.46
+  added to the tables, and the Sponsor dropdown is down to a single entry.
+
+
 0.4.46 - 2026-10-07
 -------------------
 
