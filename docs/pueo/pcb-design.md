@@ -367,7 +367,19 @@ the GPS and the PN532 datasheets showed nothing else wanted 5 V, the whole
 stage was a conversion to nowhere. The MT3608 and the MP2307 are both in hand
 and both stay on the shelf.
 
-### The two-module path is back on the table, and it is 0.5 mm short
+### The two-module path, reopened and then closed
+
+**Settled: one buck-boost.** `pueo-enclosure.scad` records it, dated the
+same day as the measurement that reopened the question: "Decided
+2026-09-26: ONE buck-boost, from the cell straight to 3.3 V. The MT3608
+does not come back and neither does the MP2307."
+
+The rest of this section is why, and is kept because a rejected path is
+worth more written down than deleted, and because the MT3608's real height
+is a measurement somebody would otherwise take again. **Its arithmetic is
+pre-shrink**: the power band it reasons about belongs to the 85 x 170 case,
+and the LiPo pocket it measures against is at y = -35 now rather than -52.
+Read it as the record of a decision, not as a live floorplan.
 
 The MT3608's height was measured on 2026-09-26: **6.0 mm**, against a
 CARRIER_HEADROOM of 13.9. It fits with 7.9 mm to spare, and the 14 mm figure
@@ -393,17 +405,25 @@ fail the same way, because the binding dimension is the 17 mm depth against a
 SCAD edit and a reprint of the base rather than a redesign. The gap between
 the pocket and the PN532 above it is 1.5 mm, so there is room to take it from.
 
-**[decide] which of the two.** Buying a buck-boost keeps the printed case and
-the existing slot, costs a part and a wait, and is the more efficient and the
-safer of the two. A fixed 3.3 V part cannot be set wrong, and +3V3_RF feeds
-three radios with nothing downstream to absorb a mistake. Using what is in
-hand costs a reprint and 10% of the runtime. Neither is wrong.
+**And it went the first way.** Buying a buck-boost kept the printed case
+and the existing slot, which is the one at 0, -60, against a reprint and
+10% of the runtime for the two modules already owned. The deciding argument
+was not efficiency: a fixed 3.3 V part cannot be set wrong, and +3V3_RF
+feeds three radios with nothing downstream to absorb a mistake, where the
+two-module path puts two trimmers in series with them.
 
 **[decide] which buck-boost**, and whether it fits. The slot at 0, -60 is
 20 x 12 mm for a part that was 17.9 x 12, so there is 2.1 mm of slack in one
 axis and none in the other. Most off-the-shelf buck-boost breakouts are larger
 than that. As an IC on the carrier PCB it is a non-issue; as a module in the
 hand-wired build it wants a small one or a bigger pocket.
+
+**The S7V8F3 fits, but only turned.** Pololu give 11.4 x 16.5, and 16.5
+does not go into the pocket's 12 mm depth. Rotated so the long axis runs
+across the 20 mm, it clears with 3.5 mm to spare one way and **0.6 mm** the
+other. That is a real fit rather than a comfortable one, and it depends on
+the pocket being 12.0 rather than 12.0 minus print tolerance, so it is
+worth a test print of the base before the part is bought.
 
 Sizing it: the radios are the load that matters, and the GPS's peak is 100 mA
 on its own.
@@ -548,22 +568,36 @@ design most likely to disappoint.
 
 ## Mechanical
 
-Base interior is 85 - 2×2.5 = **80 mm** wide and 170 - 5 = **165 mm** long,
-with a 2 mm pocket and 4 mm floor. Mounting bosses are M3 self-tap pilots,
-R4.0, inset 6 mm from the corners.
+Base interior is **79 mm** wide and **137 mm** long, with a 2 mm pocket and
+a 4 mm floor. M3 bosses at ±36, ±66.
 
-Module positions are already fixed by the enclosure (origin = case centre):
+Module positions are fixed by the enclosure, and `pueo-enclosure.scad` is
+the authority for them rather than this file (origin = case centre):
 
 | module | centre (x, y) | size |
 |---|---|---|
-| MT3608 boost | -19, -65 | 36 × 17 |
-| TP4056 charger | 26.6, -62 | 26 × 19 |
-| MP2307 buck | -29, -48 | 17.9 × 12 |
-| LiPo pack | -16, -23 | 45 × 34 |
-| ATGM336H GPS | 0, 52 | 16 × 13 |
-| PN532 V3 | 0, 18 | 43 × 41 |
-| CC1101 HW-863 | -23, 61.5 | 15 × 40 |
-| NRF24 PA+LNA | 22, 61 | 16 × 41 |
+| buck-boost | 0, -60 | 20 × 12 (pocket) |
+| LiPo pack | 0, -35 | 45 × 34 |
+| PN532 V3 | 0, 4 | 43 × 41 |
+| ATGM336H GPS | 0, 40 | 16 × 13 |
+| CC1101 HW-863 | -23, 48 | 15 × 40 |
+| NRF24 PA+LNA | 22, 47.5 | 16 × 41 |
+
+**Six modules, not eight, and on the centreline.** The case is 84 × 142,
+down from 85 × 170. The MT3608 and the TP4056 came out when the CYD's
+FM5324GA turned out to be both of them in one chip, and taking them out
+removed 28 mm of length and let everything else line up on x = 0. They
+come back, and so does the larger case, only under `EXT_CHARGER = true`,
+for a board that has no charger of its own.
+
+**This table replaced an 85 × 170 one** that still listed the MT3608, the
+TP4056 and the MP2307 at their old positions, with every y about 14 mm out
+and no row for the part actually chosen. The enclosure had been redrawn and
+this file had not: the two live in different repositories and nothing
+compares them, which is the only reason it survived.
+
+Whether a real buck-boost fits that 20 × 12 pocket is open, and is tracked
+once under **[decide] which buck-boost** above rather than twice here.
 
 Constraints that follow:
 
