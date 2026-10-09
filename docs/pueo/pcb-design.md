@@ -803,6 +803,24 @@ it: an unconnected pad is a running converter. It still needs a pad. A three-pad
 four-pin part is the kind of thing that is free to fix now and a scalpel
 later.
 
+**[verify] the silkscreen does not say which output.** The back of the part
+in hand reads `reg09b`, `0J7031`, the Pololu logo and (c)2012, photographed
+2026-10-08. Those markings are the whole S7V8 family's: the adjustable S7V8A,
+the S7V8F3 at 3.3 V and the S7V8F5 at 5 V all carry them. They do rule out the
+S7V7F5, which is `reg09a` and `0J3933` and a different size, so they confirm
+the 11.4 x 16.5 footprint everything above is dimensioned against.
+
+No trimmer on the component side rules out the S7V8A, which leaves F3 against
+F5 and nothing on the board to tell them apart. A 5 V part on `+3V3_RF` feeds
+three radios rated 3.3, so the output wants a meter on it before it feeds
+anything, not a trusted shipping label.
+
+The minute that takes is already in the build: Stage 0 of the bench build sets
+the rails and measures them unloaded before a module is on the end of them.
+That step was written for adjustable parts shipping at an arbitrary setting,
+and it is also what tells you which fixed variant arrived. Worth saying,
+because a fixed regulator reads as nothing to check.
+
 **Read that order off the silkscreen, not off this page.** A four-pin inline
 footprint has two ways to be right and one of them is backwards: the same part
 is `VOUT GND VIN SHDN` from one end and `SHDN VIN GND VOUT` from the other,
