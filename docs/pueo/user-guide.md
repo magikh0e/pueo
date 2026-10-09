@@ -320,6 +320,19 @@ open and then tell you the module is missing.
 FAT32, inserted in the slot in the side of the lid. The card can go in and
 out without opening the case.
 
+**A card over 32 GB will not mount until you reformat it.** exFAT is compiled
+out of the core this is built against, `FF_FS_EXFAT 0` in its `ffconf.h`, and
+exFAT is what every card above 32 GB arrives formatted as. The symptom does
+not look like a filesystem: the card reads on a computer and does nothing on
+the device, which reads as a dead slot. FAT16 mounts as well, if the card is
+old and small enough to have it.
+
+**Windows will not make a FAT32 volume above 32 GB** from its own Format
+dialog. That is the dialog rather than FAT32, which goes to 2 TB. The SD
+Association's [SD Card Formatter](https://www.sdcard.org/downloads/formatter/)
+does it, and so does `mkfs.vfat -F 32` from anything unix. A 64 GB card is
+fine once something other than Windows has formatted it.
+
 Everything lives in one folder, `/pueo/`. The card is yours, and a tool
 that scatters nine directories through your root has made it its own.
 
