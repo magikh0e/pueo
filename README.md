@@ -119,7 +119,8 @@ Inherited from ESP32-DIV unless marked.
 
 ### What Pueo adds
 
-Six features are Pueo's own. Four of them only listen.
+Nine features are Pueo's own. Five of them only listen, and two touch no
+radio at all.
 
 **Surveillance** (called Spotter until 0.4.0) is passive detection of
 surveillance and tracking hardware that announces itself: plate readers and
@@ -163,6 +164,29 @@ second, where a scan sweep samples once every 1.7 s and transmits to do it.
 device had never looked at, plus a probe for CVE-2025-36911. The probe is
 the one feature here that transmits at a single named target, and it sits
 behind a confirm screen that names the address.
+
+**Freq Analyser** sweeps the sub-GHz list and shows where the energy is.
+Replay Attack wants a frequency chosen before it will listen, and a remote
+on the wrong one is indistinguishable from a remote that is not
+transmitting, which left eighteen ambiguous guesses. The peak is what makes
+it usable: a key fob transmits for perhaps 200 ms, so an instantaneous bar
+chart is blank by the time you have looked up from the remote, and the hold
+decays slowly enough that a burst stays readable while a steady carrier
+still stands out from it. Tune, read RSSI, repeat. Nothing to refuse under
+Stealth Mode.
+
+**Import .sub** reads a Flipper key file into a saved profile. Pueo's own
+captures live in a packed struct in EEPROM and export as a binary blob with
+a magic number, which interoperates with exactly nothing, and `.sub` is what
+the rest of the sub-GHz world trades in. The parser touches no card, no
+display and no radio, which is what lets `tools/check_sub_parse.py` run it
+on a host and hold it to 61,453 checks.
+
+**Export .sub** writes a profile back out as one. The easier direction,
+because every field in the record has exactly one spelling in the format.
+It earns its place because the five-slot EEPROM pushes older captures out as
+new ones arrive, and without this the way out is a binary only this firmware
+reads.
 
 **File Transfer** gets a capture off the card without pulling the card. It
 raises its own WPA2 access point with an eight digit password shown on
