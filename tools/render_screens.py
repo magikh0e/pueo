@@ -215,7 +215,7 @@ def load_branding():
         open(os.path.join(REPO, "ESP32-DIV", "Branding.h"),
              encoding="utf-8", newline="").read())
     out = {}
-    for name in ("PUEO_VERSION", "PUEO_AUTHOR", "PUEO_TAGLINE",
+    for name in ("PUEO_NAME", "PUEO_VERSION", "PUEO_AUTHOR", "PUEO_TAGLINE",
                  "PUEO_UPSTREAM"):
         m = re.search(r"#define\s+" + name + r'\s+"([^"]*)"', src)
         if not m:
@@ -482,22 +482,86 @@ def status_bar(t, h=20):
     t.draw_bitmap(sd_icon_x + 10, y - 2, "bitmap_icon_sdcard", 16, 16, GREEN)
 
 
+def _c565(r, g, b):
+    """TFT_eSPI's color565. Kept as an int so the mix below is the firmware's."""
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
+
+
+def _mix565(a, b, k):
+    """splashMix() in utils.cpp: a toward b by k/255, in RGB565 components."""
+    ar, ag, ab = (a >> 11) & 0x1F, (a >> 5) & 0x3F, a & 0x1F
+    br, bg, bb = (b >> 11) & 0x1F, (b >> 5) & 0x3F, b & 0x1F
+    return (((ar + (br - ar) * k // 255) << 11)
+            | ((ag + (bg - ag) * k // 255) << 5)
+            | (ab + (bb - ab) * k // 255))
+
+
+# bootSplash() in utils.cpp. Same names, so a diff against the C++ reads.
+SPLASH_HORIZON = 384
+SPLASH_LOG_TOP = 252
+SPLASH_LOG_END = SPLASH_HORIZON - 44
+SPLASH_LINE_H = 16
+
+SPLASH_LOG = [("[boot] start", True),
+              ("[boot] classic BT RAM released", False),
+              ("[boot] settings: loaded from SD", False),
+              ("[boot] BLE/WiFi-bg deferred (v1)", False),
+              ("[boot] SD mounted, /pueo ok", False),
+              ("[boot] ready", True)]
+
+
 def render_boot(t, brand):
-    """displayLogo(TFT_WHITE, 500) in utils.cpp."""
-    t.fill_screen(BLACK)
-    lw = lh = 200
-    lx, ly = (W - lw) // 2, (H - lh) // 2 - 20
-    t.draw_bitmap(lx, ly, "bitmap_pueo_logo", lw, lh, WHITE)
-    ty = ly + lh + 10
+    """bootSplash() in utils.cpp, at its last step."""
+    import math
+    bg = _c565(8, 6, 16)
+    grid_b, grid_d = _c565(170, 45, 165), _c565(70, 22, 82)
+    horiz, trace = _c565(190, 60, 185), _c565(124, 229, 119)
+    log_c = _c565(96, 158, 116)
+    dim, dimmer = _c565(96, 108, 120), _c565(86, 96, 106)
     cx = W // 2
-    # PUEO_LOGO_HAS_WORDMARK is 1, so no separate name line
-    t.draw_string_tc("by: " + brand["PUEO_AUTHOR"], cx, ty, WHITE)
-    ty += 16
-    t.draw_string_tc(brand["PUEO_TAGLINE"], cx, ty, WHITE)
-    ty += 16
-    t.draw_string_tc(brand["PUEO_VERSION"], cx, ty, WHITE)
-    ty += 22
-    t.draw_string_tc(brand["PUEO_UPSTREAM"], cx, ty, WHITE)
+
+    t.fill_screen(rgb(bg))
+
+    t.draw_string_tc("%s %s" % (brand["PUEO_NAME"], brand["PUEO_VERSION"]),
+                     cx, 5, rgb(dim), rgb(bg))
+    t.draw_string_tc(brand["PUEO_TAGLINE"], cx, 15, rgb(dim), rgb(bg))
+    t.draw_string_tc("by %s . %s" % (brand["PUEO_AUTHOR"], brand["PUEO_UPSTREAM"]),
+                     cx, 25, rgb(dimmer), rgb(bg))
+
+    for gx in range(-240, 561, 40):
+        t.draw_line(cx, SPLASH_HORIZON, gx, H, rgb(grid_d))
+    for i in range(1, 13):
+        y = SPLASH_HORIZON + (i * i * 21) // 20
+        if y >= H:
+            break
+        t.draw_fast_hline(0, y, W, rgb(grid_b if i < 4 else grid_d))
+
+    prev = None
+    for x in range(W):
+        n = math.sin(x * 0.11) * 7.0 + math.sin(x * 0.037 + 1.3) * 7.0
+        peak = 34 if 96 < x < 104 else (26 if 210 < x < 216 else 0)
+        y = SPLASH_HORIZON - int(abs(n)) - peak
+        if prev is not None:
+            t.draw_line(x - 1, prev, x, y, rgb(trace))
+        prev = y
+    t.draw_fast_hline(0, SPLASH_HORIZON, W, rgb(horiz))
+
+    lw = lh = 200
+    lx, ly = (W - lw) // 2, 40
+    t.draw_bitmap(lx, ly, "bitmap_pueo_logo", lw, lh, WHITE)
+    for y in range(0, ly + lh, 4):
+        t.draw_fast_hline(0, y, W, rgb(_c565(4, 4, 10)))
+
+    step = len(SPLASH_LOG) - 1
+    for i in range(step + 1):
+        y = SPLASH_LOG_TOP + (step - i) * SPLASH_LINE_H
+        if y > SPLASH_LOG_END:
+            continue
+        k = (y - SPLASH_LOG_TOP) * 255 // (SPLASH_LOG_END - SPLASH_LOG_TOP)
+        k = k * k // 255
+        text, hot = SPLASH_LOG[i]
+        t.print_f1(16, y, text, rgb(_mix565(trace if hot else log_c, bg, k)),
+                   rgb(bg))
 
 
 # PUEO_MARK_W / PUEO_MARK_H in Branding.h. Panel-independent: 200 fits both.

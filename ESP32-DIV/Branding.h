@@ -87,8 +87,18 @@
  * own name on the box.
  *
  * The skull is repeats x 10 frames x 100 ms, so one pass is 1.0 s. */
+/* Superseded by bootSplash(), which replaced both marks. Kept because the
+ * skull animation and displayLogo() are both still callable and both still
+ * read these. */
 #define PUEO_BOOT_SKULL_REPEATS 1
 #define PUEO_BOOT_LOGO_MS       1500
+
+/* bootSplash(): six log lines at SPLASH_STEP_MS, then this. Six steps at
+ * 260 ms is 1.56 s, so the whole splash is 2.2 s, which is what the skull
+ * and the owl cost between them. Nothing waits on it either way: it is
+ * blocking, and the honest version drives the lines off real boot progress
+ * instead of a timer. */
+#define PUEO_BOOT_HOLD_MS       600
 
 #define PUEO_LOGO_W 200
 #define PUEO_LOGO_H 200

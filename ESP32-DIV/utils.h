@@ -153,6 +153,9 @@ NotificationAction notificationHandleTouch(int x, int y);
 void printWrappedText(int x, int y, int maxWidth, const char* text);
 void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, bool center);
 void displayLogo(uint16_t color, int displayTime);
+/* The boot splash: grid, spectrum, mark and the [boot] log. Replaces the
+ * skull animation and displayLogo() at startup. */
+void bootSplash();
 void initSDCard();
 
 namespace AppSettingsUI{ void setup(); void loop(); }

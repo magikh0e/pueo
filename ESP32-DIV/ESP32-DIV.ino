@@ -4310,10 +4310,7 @@ void setup() {
    * One pass of the skull is still a nod to where this came from; the owl
    * now holds long enough to read the name under it. Total splash goes from
    * 2.5 s to 2.2 s, so this costs nothing at boot. */
-  loading(100, UI_ICON, 0, 0, PUEO_BOOT_SKULL_REPEATS, true);
-
-  tft.fillScreen(TFT_BLACK);
-  displayLogo(TFT_WHITE, PUEO_BOOT_LOGO_MS);
+  bootSplash();
 
   initSDCard();
 

@@ -1510,6 +1510,152 @@ void displayLogo(uint16_t color, int displayTime) {
   delay(displayTime);
 }
 
+/* ── Boot splash ─────────────────────────────────────────────────────────────
+ * Replaces the skull animation and displayLogo(). The shape is borrowed from
+ * Sprout's splash (a desk-companion sketch for this same panel): a
+ * perspective grid running to a horizon, the wordmark above it, CRT
+ * scanlines. What is Pueo's is the content: the trace on the horizon is a
+ * spectrum, and the text falling out from under the owl is this firmware's
+ * own [boot] lines.
+ *
+ * Why it steps a line at a time instead of scrolling smoothly. A pixel
+ * scroll means clearing and redrawing the whole log band every frame. The
+ * band is 320 x 110, which is 35 kpx, which is about 21 ms of SPI at this
+ * clock, so a 1.5 s travel would spend most of itself in fillRect and still
+ * look slow. Six steps cost six redraws, and a terminal printing one line at
+ * a time is the right look regardless.
+ *
+ * Nothing here is a bitmap except the owl, which icon.h already carries. The
+ * grid, the trace and the fade are primitives and one sine, so this adds no
+ * flash for frames.
+ *
+ * The byline, tagline, version and upstream credit used to sit under the
+ * mark. They are a three-line strip at the top now. The upstream line is an
+ * attribution for a GPL fork of MIT code, not decoration, so it stays whole.
+ */
+
+/* Mix two RGB565 colours, k in 0..255 toward b. Used for the fade: a log
+ * line dims by how far it has fallen, and reaches the background before it
+ * reaches the trace. */
+static uint16_t splashMix(uint16_t a, uint16_t b, uint8_t k) {
+  int ar = (a >> 11) & 0x1F, ag = (a >> 5) & 0x3F, ab = a & 0x1F;
+  int br = (b >> 11) & 0x1F, bg = (b >> 5) & 0x3F, bb = b & 0x1F;
+  int r = ar + ((br - ar) * k) / 255;
+  int g = ag + ((bg - ag) * k) / 255;
+  int bl = ab + ((bb - ab) * k) / 255;
+  return (uint16_t)((r << 11) | (g << 5) | bl);
+}
+
+#define SPLASH_HORIZON   384
+#define SPLASH_LOG_TOP   252
+#define SPLASH_LOG_END   (SPLASH_HORIZON - 44)
+#define SPLASH_LINE_H    16
+#define SPLASH_STEP_MS   260
+
+/* The lines, in the order the firmware prints them. Kept short enough for
+ * the 5x7 font at 320 px: 53 characters is the limit and the longest here is
+ * 31. Two are highlighted because they are the ones worth seeing. */
+static const char *const kSplashLog[] = {
+  "[boot] start",
+  "[boot] classic BT RAM released",
+  "[boot] settings: loaded from SD",
+  "[boot] BLE/WiFi-bg deferred (v1)",
+  "[boot] SD mounted, /pueo ok",
+  "[boot] ready",
+};
+static const bool kSplashLogHot[] = { true, false, false, false, false, true };
+static const int kSplashLogN = sizeof(kSplashLog) / sizeof(kSplashLog[0]);
+
+void bootSplash() {
+  const uint16_t bg    = tft.color565(8, 6, 16);
+  const uint16_t gridB = tft.color565(170, 45, 165);
+  const uint16_t gridD = tft.color565(70, 22, 82);
+  const uint16_t horiz = tft.color565(190, 60, 185);
+  const uint16_t trace = tft.color565(124, 229, 119);
+  const uint16_t logC  = tft.color565(96, 158, 116);
+  const uint16_t dim   = tft.color565(96, 108, 120);
+  const uint16_t dimmer= tft.color565(86, 96, 106);
+  const int cx = tft.width() / 2;
+
+  tft.fillScreen(bg);
+
+  /* Credits first, so everything else can overlap them rather than the other
+   * way round. Three lines at the 5x7 font: name and version, tagline, then
+   * the byline and the upstream attribution on one line. */
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  tft.setTextDatum(TC_DATUM);
+  char top[64];
+  snprintf(top, sizeof(top), "%s %s", PUEO_NAME, PUEO_VERSION);
+  tft.setTextColor(dim, bg);
+  tft.drawString(top, cx, 5);
+  tft.drawString(PUEO_TAGLINE, cx, 15);
+  snprintf(top, sizeof(top), "by %s . %s", blSeq(), PUEO_UPSTREAM);
+  tft.setTextColor(dimmer, bg);
+  tft.drawString(top, cx, 25);
+
+  /* The grid. Horizontals crowd toward the horizon as i*i, which is what
+   * makes it read as distance rather than as stripes; the rays converge on
+   * the vanishing point at the middle of the horizon. */
+  for (int gx = -240; gx <= 560; gx += 40)
+    tft.drawLine(cx, SPLASH_HORIZON, gx, tft.height(), gridD);
+  for (int i = 1; i < 13; i++) {
+    int y = SPLASH_HORIZON + (i * i * 21) / 20;
+    if (y >= tft.height()) break;
+    tft.drawFastHLine(0, y, tft.width(), i < 4 ? gridB : gridD);
+  }
+
+  /* A spectrum sitting on the horizon. Two sines and a pair of carriers, so
+   * it looks like a band in use rather than noise, and costs no storage. */
+  int prev = -1;
+  for (int x = 0; x < tft.width(); x++) {
+    float n = sinf(x * 0.11f) * 7.0f + sinf(x * 0.037f + 1.3f) * 7.0f;
+    int peak = (x > 96 && x < 104) ? 34 : ((x > 210 && x < 216) ? 26 : 0);
+    int y = SPLASH_HORIZON - (int)(fabsf(n)) - peak;
+    if (prev >= 0) tft.drawLine(x - 1, prev, x, y, trace);
+    prev = y;
+  }
+  tft.drawFastHLine(0, SPLASH_HORIZON, tft.width(), horiz);
+
+  /* The mark, over the top of the log band so the lines appear from behind
+   * it rather than below it. */
+  const int lx = (tft.width() - PUEO_LOGO_W) / 2;
+  const int ly = 40;
+  tft.drawBitmap(lx, ly, PUEO_LOGO_BITMAP, PUEO_LOGO_W, PUEO_LOGO_H, TFT_WHITE);
+
+  /* CRT scanlines, over the mark only. Below it the grid is the texture. */
+  for (int y = 0; y < ly + PUEO_LOGO_H; y += 4)
+    tft.drawFastHLine(0, y, tft.width(), tft.color565(4, 4, 10));
+
+  /* And the log, a line at a time. Line i has fallen (step - i) places, so
+   * the first one printed is the lowest and the faintest. */
+  tft.setTextDatum(TL_DATUM);
+  for (int step = 0; step < kSplashLogN; step++) {
+    tft.fillRect(0, SPLASH_LOG_TOP, tft.width(),
+                 SPLASH_LOG_END - SPLASH_LOG_TOP + SPLASH_LINE_H, bg);
+    for (int i = 0; i <= step; i++) {
+      int y = SPLASH_LOG_TOP + (step - i) * SPLASH_LINE_H;
+      if (y > SPLASH_LOG_END) continue;
+      int k = ((y - SPLASH_LOG_TOP) * 255) / (SPLASH_LOG_END - SPLASH_LOG_TOP);
+      k = (k * k) / 255;                       /* hold, then go quickly */
+      tft.setTextColor(splashMix(kSplashLogHot[i] ? trace : logC, bg,
+                                 (uint8_t)k), bg);
+      tft.drawString(kSplashLog[i], 16, y);
+    }
+    delay(SPLASH_STEP_MS);
+  }
+  delay(PUEO_BOOT_HOLD_MS);
+
+  Serial.println("==================================");
+  Serial.println(PUEO_NAME " - " PUEO_TAGLINE);
+  Serial.print("by: "); Serial.println(blSeq());
+  Serial.print("Version:      "); Serial.println(PUEO_VERSION);
+  Serial.print("Forked from:  ESP32-DIV "); Serial.println(ESP32DIV_VERSION);
+  Serial.println(PUEO_UPSTREAM);
+  Serial.print("Upstream:     "); Serial.println(PUEO_UPSTREAM_URL);
+  Serial.println("==================================");
+}
+
 namespace Terminal {
 
 #define TEXT_HEIGHT 16
