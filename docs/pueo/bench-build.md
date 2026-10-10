@@ -228,7 +228,7 @@ them existed.
 **Do this**
 
 ```bash
-esptool.py --chip esp32 -b 921600 write_flash 0x0 pueo-0.4.47-merged.bin
+esptool.py --chip esp32 -b 921600 write_flash 0x0 pueo-0.4.48-merged.bin
 ```
 
 Boot it with nothing attached.

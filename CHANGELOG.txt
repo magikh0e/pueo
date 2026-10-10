@@ -11,6 +11,91 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.48 - 2026-10-09
+-------------------
+
+  A boot splash of this project's own. The skull was upstream's and the
+  owl was a still.
+
+  * THE SCREEN NOW SAYS WHERE IT GOT TO.
+
+    Boot was one pass of CiferTech's skull animation and then the owl held
+    for a second and a half: 2.2 seconds of blocking delay with nothing
+    initialising behind it, and nothing on screen that the device could
+    not have drawn before it was written.
+
+    It is one scene now. A perspective grid runs to a horizon, a spectrum
+    trace sits on the horizon, the owl is above it, and the firmware's own
+    [boot] lines fall out from under the mark, dimming as they drop and
+    gone before they reach the trace.
+
+    The shape is borrowed, and from an unlikely place: Sprout, a desk
+    companion sketch for this same panel. What made it worth copying is
+    that none of it is stored. The grid is twelve horizontals spaced as
+    i*i so they crowd toward the horizon, plus rays to a vanishing point;
+    the trace is two sines and two carriers; the fade is an integer mix.
+    The only bitmap is the owl, which icon.h already carried.
+
+    So it cost 24 bytes of flash against the two marks it replaced, and
+    no RAM at all. An intro built from frames would have been the
+    expensive version of the same idea.
+
+  * IT STEPS A LINE AT A TIME, AND THAT IS A MEASUREMENT.
+
+    A pixel scroll means clearing and redrawing the log band every frame.
+    The band is 320 x 110, about 35 kpx, which is roughly 21 ms of SPI at
+    this clock, so a 1.5 second travel would spend most of itself in
+    fillRect and still look slow. Five steps cost five redraws, and a
+    terminal printing one line at a time is the right look anyway.
+
+    The step timer is still a timer. The honest version drives the lines
+    off real boot progress so the splash ends when [boot] ready is true,
+    which turns the delay into a progress indicator. That is a setup()
+    reordering and has not been done.
+
+  * IT SHOWED A LINE THE FIRMWARE NEVER PRINTS.
+
+    The log had six entries and the fifth was "[boot] SD mounted, /pueo
+    ok", which exists nowhere in the tree. It was written to fill the
+    space, it compiled, and it would have shipped.
+
+    A boot log is the surface a reader trusts to tell them where startup
+    got to. One that includes a line the firmware cannot emit is worse
+    than no log, because it reads as evidence. Five lines now, the real
+    ones in the real order, checked against what the board actually
+    prints.
+
+    What caught it was reading the serial before flashing rather than
+    after, and that was being done for an unrelated reason: both boards
+    arrive as a CH340 on the same port, so the only way to know which one
+    is on the end of the cable is to ask it. The banner answered the
+    question it was asked and a different one as well.
+
+  * AND IT CAN BE SEEN WITHOUT A BOARD.
+
+    tools/render_screens.py draws the splash, so it parses the real 1-bpp
+    owl out of icon.h and the real 5x7 cells out of TFT_eSPI and produces
+    what the panel produces. It earned that immediately: the first
+    version put the last log line at y=352 and the spectrum peaks at 350.
+    The line pitch is 16 and the fade stops 44 above the horizon because
+    of what it showed.
+
+  displayLogo() is now uncalled and stays anyway, until the new screen
+  has been lived with. Removing it also orphans PUEO_LOGO_HAS_WORDMARK
+  and the layout arithmetic in Branding.h that goes with it.
+
+  Riding along, none of it reaching the device: the bench build gained a
+  parts list, five stages with drawings for four of them, the soldering
+  notes the build guide always had, what the SD card has to be formatted
+  to and why a 64 GB one will not mount, and the flash mode. PUEO.md
+  stopped claiming two panels and an SPI bus on a connector. The user
+  guide said ten tables where there are nine, and said it because
+  check_sig_counts.py was asserting the kind count against the word
+  "tables". README caught up with a feature recount it missed. The S7V8
+  silkscreen turns out to name the regulator family and not its output
+  voltage, which is a thing to meter rather than to trust.
+
+
 0.4.47 - 2026-10-08
 -------------------
 
