@@ -1560,10 +1560,9 @@ static const char *const kSplashLog[] = {
   "[boot] classic BT RAM released",
   "[boot] settings: loaded from SD",
   "[boot] BLE/WiFi-bg deferred (v1)",
-  "[boot] SD mounted, /pueo ok",
   "[boot] ready",
 };
-static const bool kSplashLogHot[] = { true, false, false, false, false, true };
+static const bool kSplashLogHot[] = { true, false, false, false, true };
 static const int kSplashLogN = sizeof(kSplashLog) / sizeof(kSplashLog[0]);
 
 void bootSplash() {

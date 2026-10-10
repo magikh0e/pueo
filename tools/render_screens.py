@@ -506,7 +506,6 @@ SPLASH_LOG = [("[boot] start", True),
               ("[boot] classic BT RAM released", False),
               ("[boot] settings: loaded from SD", False),
               ("[boot] BLE/WiFi-bg deferred (v1)", False),
-              ("[boot] SD mounted, /pueo ok", False),
               ("[boot] ready", True)]
 
 
