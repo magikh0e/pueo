@@ -45,11 +45,21 @@ and it stays there in almost every feature.
 | signal | WiFi activity |
 | satellite | lit when the GPS has a fix |
 | temperature | the ESP32's internal sensor, not the room |
-| SD | one icon for a card present, a different one for none |
+| SD | one icon for a card that mounted, a different one for none |
 
 The SD icon is the one worth glancing at before you start anything that
 captures. It is the difference between a session you can read afterwards and
 one you cannot.
+
+What it reports is the mount, not the slot. The 3.5" has no card-detect pin,
+so the card is read rather than sensed, and the reading happens at boot when
+settings are loaded. The icon settles a second or two in and then stays put.
+
+That makes the empty-slot icon worth more than "no card". It also appears for
+a card the device cannot read: the wrong format is the usual reason, since
+anything larger than 32 GB tends to arrive as exFAT and this firmware mounts
+FAT32 only. A card that is seated, formatted and readable shows the other
+icon.
 
 ---
 

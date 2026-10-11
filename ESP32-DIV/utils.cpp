@@ -506,19 +506,53 @@ float readInternalTemperature() {
   return temperature;
 }
 
+#ifndef SD_CD
+/* Defined with the other SD statics further down, where the flag it reads
+ * lives. Declared here because updateSdCardStatus() comes first. */
+static bool sdMountIsBelievedGood();
+#endif
+
 void updateSdCardStatus() {
 
 #ifdef SD_CD
-  bool cardDetected = !digitalRead(SD_CD);
+  /* A detect pin answers directly: something is in the slot. */
+  const bool cardDetected = !digitalRead(SD_CD);
+  const char *const onMsg  = "SD Card detected";
+  const char *const offMsg = "SD Card removed";
 #else
-  bool cardDetected = true;
+  /* No detect pin on this board, so the slot cannot be asked, and this
+   * used to resolve to a bare `true`. That meant the status bar claimed a
+   * card on every boot whether one was fitted or not, the empty-slot icon
+   * was unreachable, and the user guide pointed at that icon as the thing
+   * to check before starting anything that captures.
+   *
+   * Without a detect pin the honest claim is not "a card is present" but
+   * "a card has been read", so this follows the filesystem mount. It errs
+   * toward saying no card rather than yes, which is the safe direction:
+   * the cost the guide warns about is believing you are recording when you
+   * are not, and a capture that cannot write already refuses to start.
+   *
+   * The cached flag, never a probe. This runs from the status bar every
+   * two seconds, and SD.cardType() would put traffic that often onto a bus
+   * shared with the CC1101 and the NRF24. The boot mount is deferred on
+   * this board for a related reason: performing it rebooted the device
+   * right after the intro. So the icon follows a mount, not a slot.
+   *
+   * That is not as late as it sounds. settingsLoad() runs in setup() and
+   * calls sdRetryMount(), so a fitted card is mounted within the first
+   * seconds and the icon settles there. Which also means the empty-slot
+   * icon now covers a card the device cannot read, exFAT being the usual
+   * reason, and not only a missing one. */
+  const bool cardDetected = sdMountIsBelievedGood();
+  const char *const onMsg  = "SD card mounted";
+  const char *const offMsg = "SD card not mounted";
 #endif
 
   if (cardDetected != lastSdCardState) {
     sdCardPresent = cardDetected;
     lastSdCardState = cardDetected;
 
-    Serial.println(sdCardPresent ? "SD Card detected" : "SD Card removed");
+    Serial.println(sdCardPresent ? onMsg : offMsg);
     requestStatusBarRedraw();
   }
 }
@@ -1028,6 +1062,14 @@ static SPIClass s_sdSpi(FSPI);
 
 /** Tracks whether SD.begin() currently owns a live mount on the shared SPI bus. */
 static bool s_sdFsMounted = false;
+
+#ifndef SD_CD
+/* What the status bar's SD icon means on a board with no card-detect pin:
+ * a card has been read, rather than a card is in the slot. Declared up
+ * beside updateSdCardStatus(), which explains why it reads the cached
+ * flag and must not probe the card. */
+static bool sdMountIsBelievedGood() { return s_sdFsMounted; }
+#endif
 
 /** GPIO CS that last mounted SD (-1 = unknown). Tried first to avoid long SD.begin on wrong CS. */
 static int8_t s_sdLastGoodCs = -1;

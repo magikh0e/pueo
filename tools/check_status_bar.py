@@ -36,6 +36,45 @@ def ok(name, cond, detail=""):
         FAILED.append(name)
 
 
+def sd_icon(utils):
+    """The SD icon has to be able to say no.
+
+    The reference board has no card-detect pin, and the no-pin branch of
+    updateSdCardStatus() used to be a bare `true`. So sdCardPresent was
+    latched true on the first call at boot and could never change: the bar
+    drew the green icon whether or not a card was fitted, the empty-slot
+    icon was unreachable, and the user guide told the reader to glance at
+    that icon before starting a capture.
+
+    Nothing caught it, because every part was individually reasonable. The
+    thing worth asserting is not the fix but the property the fix restored:
+    on a board with no detect pin the flag follows something that can be
+    false. A constant cannot.
+    """
+    print("\nthe SD icon can say no:")
+
+    m = re.search(r"#ifdef SD_CD(.*?)#endif", utils, re.S)
+    branch = m.group(1) if m else ""
+    ok("updateSdCardStatus has a no-detect-pin branch", bool(m))
+    ok("and it does not hardcode a card",
+       re.search(r"cardDetected\s*=\s*true\s*;", branch) is None,
+       "a constant here makes the empty-slot icon unreachable")
+    ok("it follows the mount instead",
+       "sdMountIsBelievedGood()" in branch)
+    ok("which reads the cached flag and does not probe the card",
+       re.search(r"sdMountIsBelievedGood\(\)\s*\{\s*return\s+s_sdFsMounted;\s*\}",
+                 utils) is not None,
+       "SD.cardType() here would hit the shared SPI bus every 2 s")
+    ok("both icons are still drawn",
+       "bitmap_icon_sdcard" in utils and "bitmap_icon_nullsdcard" in utils)
+
+    guide = (REPO / "docs" / "pueo" / "user-guide.md").read_text(
+        encoding="utf-8", errors="replace")
+    ok("the user guide does not promise it tracks the slot",
+       "one icon for a card present" not in guide,
+       "the icon means a card has been read, not that one is fitted")
+
+
 def heights():
     """The two bar heights, read rather than assumed."""
     src = (SKETCH / "shared.h").read_text(encoding="utf-8", errors="replace")
@@ -164,6 +203,8 @@ def main():
     ok("the setter compiles away when there is only one height",
        "#if PUEO_STATUS_TALL == PUEO_STATUS_SHORT" in
        (SKETCH / "utils.h").read_text(encoding="utf-8", errors="replace"))
+
+    sd_icon(utils)
 
     print()
     if FAILED:

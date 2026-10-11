@@ -11,6 +11,59 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.49 - 2026-10-10
+-------------------
+
+  The SD icon could not say no.
+
+  * THE STATUS BAR CLAIMED A CARD WHETHER OR NOT ONE WAS FITTED.
+
+    SD_CD, the card-detect pin, is defined only for BOARD_ESP32_DIV_V2.
+    On this board and on the V1 the other branch of updateSdCardStatus()
+    resolved to a bare "true", so sdCardPresent latched true on the first
+    call at boot and could never change again. The bar drew the green
+    card icon with an empty slot, "SD Card detected" printed on every
+    boot, and bitmap_icon_nullsdcard was unreachable: the empty-slot
+    icon has never once been drawn on the reference board.
+
+    The user guide pointed at that icon as the thing to check before
+    starting anything that captures, which is the one job it could not
+    do.
+
+    It follows the filesystem mount now. Without a detect pin the honest
+    claim is not "a card is present" but "a card has been read", and that
+    is not as late as it sounds: settingsLoad() runs in setup() and calls
+    sdRetryMount(), so a fitted card is mounted within the first seconds
+    and the icon settles there.
+
+    Which makes the empty-slot icon worth more than it would have been.
+    It now also appears for a card the device cannot read, and the usual
+    reason is the format: anything larger than 32 GB tends to arrive as
+    exFAT and this firmware mounts FAT32 only. That was previously
+    invisible.
+
+    Nothing was at risk of being lost. isSDCardAvailable() does a real
+    SD.cardType() check and every capture gates on it, so a feature that
+    could not write already refused to start. It was the pre-flight
+    indicator that lied, not the recording path.
+
+  * THE READ THAT REPORTS IT MUST NOT PROBE THE CARD.
+
+    updateSdCardStatus() runs from the status bar every two seconds, on a
+    bus shared with the CC1101 and the NRF24, so it reads a cached mount
+    flag rather than calling SD.cardType() itself. The boot mount is
+    deferred on this board for the same family of reason: performing it
+    right after tft.init() used to reboot the device.
+
+  * AND THE PROPERTY IS ASSERTED NOW.
+
+    check_status_bar.py gained six checks, including that the
+    no-detect-pin branch does not resolve to a constant and that the
+    guide does not promise the icon tracks the slot. Reverting the fix
+    fails two of them. Nothing caught this before because every part of
+    it was individually reasonable.
+
+
 0.4.48 - 2026-10-09
 -------------------
 
