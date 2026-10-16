@@ -6121,15 +6121,53 @@ OperationMode currentMode = WiFi_MODULE;
 
 bool jammerActive = false;
 
+/* Every table here is in nRF24 RF_CH, because that is what hopStep() hands
+ * to Nrf24Raw::hopTo(). RF_CH n is a carrier at 2400 + n MHz.
+ *
+ * That is not the numbering a protocol uses for its own channels, and two
+ * of these tables held protocol channel numbers instead. The WiFi set was
+ * {1..12} and the Zigbee set {11, 15, 20, 25}, which as RF_CH are 2401 to
+ * 2412 MHz and 2411 to 2425 MHz. But 802.11 channels 1 to 12 occupy 2412
+ * to 2467, and 802.15.4 channels 11, 15, 20 and 25 are at 2405, 2425,
+ * 2450 and 2475. So the WiFi mode sat below every channel except the
+ * bottom edge of the first, and the Zigbee mode hit one of its four by
+ * coincidence. Both transmitted; neither was where its menu entry said.
+ *
+ * The arithmetic was never unknown here. bandTag(), which labels the
+ * scanner's readings a thousand lines up, carries the same two
+ * conversions and always has. The tables go through macros now so the
+ * unit is visible at every entry instead of implied by a bare number.
+ *
+ * The other sets are deliberate RF_CH picks with no protocol numbering
+ * behind them to confuse, and are left alone. ble_channels and
+ * bluetooth_channels were already right: BLE advertising channels 37, 38
+ * and 39 are 2402, 2426 and 2480 MHz, which is exactly {2, 26, 80}. */
+
+/* 802.11 channel w is centred at 2412 + 5(w-1) MHz. */
+#define WIFI_RF_CH(w)   ((byte)(12 + 5 * ((w) - 1)))
+/* 802.15.4 channel z is centred at 2405 + 5(z-11) MHz. */
+#define ZIGBEE_RF_CH(z) ((byte)(5 + 5 * ((z) - 11)))
+
 /* See the note in BleJammer: 0 and 1 are 2400 and 2401, below Bluetooth's
  * 2402 start, and were dropped from this copy at the same time. */
 const byte bluetooth_channels[] =        {32, 34, 46, 48, 50, 52, 2, 4, 6, 8, 22, 24, 26, 28, 30, 74, 76, 78, 80};
 const byte ble_channels[] =              {2, 26, 80};
-const byte WiFi_channels[] =             {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+/* WiFi 1 to 12, as before. 13 stays out: it was never in this set, and
+ * adding a channel is a decision about what to transmit on rather than a
+ * correction to where the existing ones land. */
+const byte WiFi_channels[] =             {WIFI_RF_CH(1),  WIFI_RF_CH(2),
+                                          WIFI_RF_CH(3),  WIFI_RF_CH(4),
+                                          WIFI_RF_CH(5),  WIFI_RF_CH(6),
+                                          WIFI_RF_CH(7),  WIFI_RF_CH(8),
+                                          WIFI_RF_CH(9),  WIFI_RF_CH(10),
+                                          WIFI_RF_CH(11), WIFI_RF_CH(12)};
 const byte usbWireless_channels[] =      {40, 50, 60};
 const byte videoTransmitter_channels[] = {70, 75, 80};
 const byte rc_channels[] =               {1, 3, 5, 7};
-const byte zigbee_channels[] =           {11, 15, 20, 25};
+/* The same four Zigbee channels this always named, now at the frequencies
+ * they actually occupy: 2405, 2425, 2450 and 2475 MHz. */
+const byte zigbee_channels[] =           {ZIGBEE_RF_CH(11), ZIGBEE_RF_CH(15),
+                                          ZIGBEE_RF_CH(20), ZIGBEE_RF_CH(25)};
 const byte nrf24_channels[] =            {76, 78, 79};
 
 /* Which set each mode walks. One place, so that adding a mode is a row
@@ -10228,7 +10266,31 @@ private:
 
   void processNewDevice(BLEAdvertisedDevice* bleDevice, esp_bt_gap_cb_param_t* btDevice, unsigned long timestamp, bool isBLE) {
     if (deviceCount >= MAX_DEVICES) {
-      addLine("Max devices reached!", RED, true, MessageType::ALERT);
+      /* Say it at most once every five seconds, not once per
+       * advertisement.
+       *
+       * This runs inside the NimBLE advertised-device callback, and
+       * addLine() is not cheap: it shifts the whole visible log down by
+       * one, which copies that many Strings, and then calls
+       * updateDisplay() to repaint the log over SPI. Before the throttle,
+       * every advertisement that arrived after the table filled did all
+       * of that and then returned having stored nothing. Somewhere busy
+       * enough to reach the cap is exactly somewhere advertisements
+       * arrive many times a second, so the behaviour got worse precisely
+       * where it mattered: a callback that should return promptly instead
+       * repainting the screen, churning the heap, and starving the task
+       * it runs on.
+       *
+       * The cap itself is left at MAX_DEVICES. Raising it is a memory
+       * decision rather than a fix for this, since each entry carries
+       * three Strings and the heap on this board is already the binding
+       * constraint. */
+      static uint32_t lastCapAlertMs = 0;
+      const uint32_t nowMs = millis();
+      if (lastCapAlertMs == 0 || (uint32_t)(nowMs - lastCapAlertMs) >= 5000) {
+        lastCapAlertMs = nowMs;
+        addLine("Max devices reached!", RED, true, MessageType::ALERT);
+      }
       return;
     }
     newDevicesThisScan++;

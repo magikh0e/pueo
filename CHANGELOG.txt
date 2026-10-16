@@ -11,6 +11,66 @@ Digests for every release, pruned ones included, are at the end of
 this file.
 
 
+0.4.50 - 2026-10-16
+-------------------
+
+  Two the fork inherited, both found by reading upstream's open pull
+  requests rather than by anything misbehaving here.
+
+  * THE WIFI AND ZIGBEE JAMMER MODES TRANSMITTED IN THE WRONG PLACE.
+
+    hopStep() hands a table entry to Nrf24Raw::hopTo(), which writes
+    RF_CH: a carrier at 2400 + n MHz. Two of the tables held the
+    protocols' own channel numbers instead. WiFi was {1..12}, which as
+    RF_CH is 2401 to 2412 MHz, while 802.11 channels 1 to 12 occupy 2412
+    to 2467. Zigbee was {11, 15, 20, 25}, which is 2411 to 2425 MHz,
+    while 802.15.4 puts those four at 2405, 2425, 2450 and 2475.
+
+    So WiFi mode sat below every channel but the bottom edge of the
+    first, and Zigbee mode hit one of its four by coincidence. Both
+    transmitted. Neither was where the menu entry said, and nothing on
+    screen would have shown it: the numbers are plausible either way.
+
+    The arithmetic was never unknown in this firmware. bandTag(), which
+    labels the channel analyser's readings a thousand lines further up
+    the same file, carries both conversions and always has. The tables
+    are derived through WIFI_RF_CH and ZIGBEE_RF_CH now, so the unit is
+    visible at every entry rather than implied by a bare number.
+
+    ble_channels and bluetooth_channels were already right, which is what
+    makes this a slip rather than a misunderstanding: BLE advertising
+    channels 37, 38 and 39 are 2402, 2426 and 2480 MHz, and the table
+    says {2, 26, 80}. Whoever wrote these knew the conversion for two
+    protocols and did not apply it to the other two.
+
+    The channel selections are unchanged: WiFi 1 to 12 without 13, and
+    the same four Zigbee channels. Widening either is a decision about
+    what to transmit on, not a correction to where the existing ones
+    land.
+
+    check_band_tag.py grew nineteen assertions tying the jammer to the
+    two conversions it already tested the scanner against. The macros
+    have to exist, agree with the standards, leave no bare literal in
+    either table, and land every channel inside the ISM band. Putting
+    the old table back fails them.
+
+  * THE BLE SNIFFER REPAINTED ON EVERY ADVERTISEMENT ONCE FULL.
+
+    At MAX_DEVICES, processNewDevice() called addLine("Max devices
+    reached!") and returned. addLine() shifts the whole visible log down
+    by one, copying that many Strings, and then repaints it over SPI, and
+    all of it ran inside the NimBLE advertised-device callback.
+
+    Somewhere busy enough to fill the table is somewhere advertisements
+    arrive many times a second, so the behaviour got worse exactly where
+    it mattered: a callback that should return promptly instead
+    repainting the screen and churning the heap. Throttled to once every
+    five seconds.
+
+    The cap stays at 32. Raising it is a memory decision rather than part
+    of this, since each entry carries three Strings.
+
+
 0.4.49 - 2026-10-10
 -------------------
 

@@ -122,6 +122,66 @@ ok("2460 carries Zigbee 22 and WiFi 11", tag(2460) == "Zb22/W11")
 ok("2484 is WiFi 14 alone", tag(2484) == "W14")
 ok("2400 is neither, and says nothing", tag(2400) == "")
 
+
+# ── and the jammer tunes where the scanner says those channels are ───────
+#
+# The scanner's arithmetic above was always right. The jammer's channel
+# tables, in the same file, held protocol channel numbers and handed them
+# to Nrf24Raw::hopTo(), which writes RF_CH: a carrier at 2400 + n MHz. So
+# WiFi mode walked {1..12} and sat at 2401 to 2412 instead of 2412 to
+# 2467, and Zigbee mode walked {11, 15, 20, 25} and sat at 2411 to 2425
+# instead of 2405 to 2475. Both transmitted, neither where its menu entry
+# said, and nothing in the build could notice because the numbers were
+# plausible on their face.
+#
+# What is asserted is the property the fix restored: the tables are
+# derived from the same two conversions this file already tests, and the
+# derivation is visible rather than a bare literal.
+
+print("\nthe jammer tunes where the scanner looks:")
+
+mw = re.search(r"#define WIFI_RF_CH\(w\)\s+\(\(byte\)\((\d+) \+ 5 \* \(\(w\) - 1\)\)\)", src)
+mz = re.search(r"#define ZIGBEE_RF_CH\(z\)\s+\(\(byte\)\((\d+) \+ 5 \* \(\(z\) - 11\)\)\)", src)
+ok("the WiFi tables convert through a macro", mw is not None,
+   "a bare number here is how the units got lost")
+ok("the Zigbee tables convert through a macro", mz is not None,
+   "a bare number here is how the units got lost")
+
+if mw:
+    ok("WIFI_RF_CH agrees with 2412 + 5(w-1), minus the 2400 base",
+       int(mw.group(1)) == wifi(1) - 2400,
+       "macro base %s, standard says %d" % (mw.group(1), wifi(1) - 2400))
+if mz:
+    ok("ZIGBEE_RF_CH agrees with 2405 + 5(z-11), minus the 2400 base",
+       int(mz.group(1)) == zigbee(11) - 2400,
+       "macro base %s, standard says %d" % (mz.group(1), zigbee(11) - 2400))
+
+tbl = re.search(r"const byte WiFi_channels\[\]\s*=\s*\{(.*?)\};", src, re.S)
+ok("the WiFi table holds no bare channel numbers",
+   tbl is not None and re.fullmatch(r"[\sA-Z_0-9(),]*", tbl.group(1)) is not None
+   and "WIFI_RF_CH(" in tbl.group(1)
+   and not re.search(r"(?<![\w(])\d+(?![\w)])", tbl.group(1)),
+   "an entry is a literal, so its unit is anyone's guess")
+
+tbz = re.search(r"const byte zigbee_channels\[\]\s*=\s*\{(.*?)\};", src, re.S)
+ok("the Zigbee table holds no bare channel numbers",
+   tbz is not None and "ZIGBEE_RF_CH(" in tbz.group(1)
+   and not re.search(r"(?<![\w(])\d+(?![\w)])", tbz.group(1)),
+   "an entry is a literal, so its unit is anyone's guess")
+
+# Every channel either table names must land in the band the radio may use.
+# RF_CH is 0..125 on the part; the ISM band runs out at 2483.5 MHz, which is
+# RF_CH 83, and transmitting past it is a different kind of mistake from
+# tuning to the wrong channel.
+for w in range(1, 13):
+    rf = wifi(w) - 2400
+    ok("WiFi %d is RF_CH %d, inside the ISM band" % (w, rf), 0 <= rf <= 83,
+       "2400 + %d MHz is outside 2400 to 2483.5" % rf)
+for z in (11, 15, 20, 25):
+    rf = zigbee(z) - 2400
+    ok("Zigbee %d is RF_CH %d, inside the ISM band" % (z, rf), 0 <= rf <= 83,
+       "2400 + %d MHz is outside 2400 to 2483.5" % rf)
+
 print()
 if fails:
     print("FAILED: %d of %d" % (len(fails), checks))
