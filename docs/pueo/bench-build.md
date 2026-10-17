@@ -38,7 +38,7 @@ and the reason is the terminal at each end rather than the current.
 
 | for | wire | why |
 |---|---|---|
-| the two CYD cables | **28 AWG**, pre-crimped **JST GH 1.25 mm**, 4-way | the thickest a GH contact takes, and the gauge pre-crimped GH is sold as. Not PicoBlade, not MX1.25: see below |
+| the two CYD cables | **28 AWG**, pre-crimped **1.25 mm side-latching**, 4-way, which is JST GH or a clone of it | the thickest a GH contact takes, and the gauge pre-crimped GH is sold as. Check the latch, not the listing's name: see below |
 | module ends of those cables | individual **female Dupont** sockets, 2.54 mm | the signals are not adjacent on a 2x4, so a second housing would be wrong even at the right pitch |
 | the six soldered joints | **30 AWG** silicone-insulated stranded, or enamelled | 28 is too stiff for a castellation and levers the pad; silicone insulation survives an iron near it, PVC does not |
 | bench power, if used | whatever reaches, **22 AWG** or thicker | short and fat costs nothing on a desk and keeps the rail up |
@@ -59,13 +59,30 @@ rather than 5, and thin wire is a real share of that.
 
 ### The connector trap, which costs an order
 
-**Buy JST GH. Not PicoBlade, not MX1.25.** Pitch is not the whole part
-number. The CYD's headers are 1.25 mm and so is Molex PicoBlade, and the
-two do not mate: GH latches against the side of the shroud, PicoBlade on
-top. Listings aimed at drone builders say "PicoBlade" and "for Pixhawk" in
-the same title and those are different parts. Settled by fit on 2026-10-06,
-after [hardware.md](hardware.md) had said the opposite for a while, having
-named the series off a pitch measurement, which does not determine it.
+**Buy a 1.25 mm housing that latches against the side of the shroud, and
+check it by fit.** That is JST GH, and the thing to verify is the latch
+rather than the word in the listing.
+
+Pitch is not the whole part number. The CYD's headers are 1.25 mm and so is
+Molex PicoBlade, and the two do not mate: GH latches against the side of
+the shroud, PicoBlade on top. Listings aimed at drone builders say
+"PicoBlade" and "for Pixhawk" in the same title and those are different
+parts.
+
+**The seller's name settles nothing in either direction.** This section
+used to say "not MX1.25", on a fit test from 2026-10-06 where a housing
+sold under that name would not seat. A different kit sold under the same
+name, an assortment of 2P to 10P pre-crimped leads, was offered to the same
+header on 2026-10-16 and clicked and held. So "MX1.25" is a seller's label
+rather than a series, and reading it as one is how this advice came to name
+a part that is sometimes right and sometimes wrong.
+
+**The acceptance test, which takes a second:** push the housing fully home
+and tug the wire. A click and resistance is the right part. Snug but
+sliding straight out is the trap: 1.25 mm mates on pitch alone, and a
+friction fit on a radio module works on the bench and drops out when the
+board is handled, which is worse than a connector that obviously does not
+go in.
 
 ### Check the module you were actually sent
 
@@ -115,13 +132,18 @@ the "No CC1101" screen rather than anything that looks like a wiring fault.
 
 ## Cables for a bench build
 
-**Buy JST GH, 4-way, pre-crimped. Not PicoBlade, not MX1.25.**
+**Buy 4-way, pre-crimped, 1.25 mm, side-latching. That is JST GH, and the
+latch is what to check rather than the name on the bag.**
 
 Pitch is not the whole part number, and this is the specific way this build
 wastes an order. The CYD's headers are 1.25 mm, and so is Molex PicoBlade,
 and the two do not mate: GH latches against the side of the shroud,
 PicoBlade on top. Listings aimed at drone builders say "PicoBlade" and "for
 Pixhawk" in the same title, and those are different parts.
+
+A listing saying "MX1.25" tells you nothing either way: one kit under that
+name would not seat, another clicked and held in the same header. Push it
+home and tug it, and believe that instead.
 
 Settled by fit on 2026-10-06: a PicoBlade housing offered to the header does
 not seat, with the pitch correct. [hardware.md](hardware.md) said the

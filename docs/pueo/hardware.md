@@ -101,17 +101,30 @@ Not a PicoBlade housing, which is the part this used to name. PicoBlade does
 not seat on these headers at any pitch, so a refusal would read as "not
 1.25" when it only means "not PicoBlade".
 
-**Buy JST GH, not MX1.25 or Molex PicoBlade.** Both are 1.25 mm pitch and
-they do not mate: GH latches on the side, PicoBlade on top. Listings make
-this worse rather than better, because plenty of them say "PicoBlade" and
-"for Pixhawk" in the same title, and those are two different parts.
+**Buy the 1.25 mm housing that latches on the side, which is JST GH, and
+confirm it by fit.** PicoBlade is the same pitch and does not mate: GH
+latches on the side, PicoBlade on top. Listings make this worse rather than
+better, because plenty of them say "PicoBlade" and "for Pixhawk" in the
+same title, and those are two different parts.
 
-Settled by fit on 2026-10-06, which is the only way it can be settled: a
-PicoBlade / MX1.25 housing offered to the header does not seat, and the
-pitch is right. This paragraph used to say the opposite, having gone one
-step past its own evidence. The measurement established the **pitch**, and
-pitch does not determine series; the series was named without a housing ever
-being tried, and an order was placed against it.
+Do not buy or refuse on the name "MX1.25". It is a seller's label and not a
+series: a housing sold under it would not seat here on 2026-10-06, and a
+different kit under the same name clicked and held on 2026-10-16. The latch
+is the part number that matters.
+
+Settled by fit on 2026-10-06, which is the only way it can be settled: the
+housing offered to the header that day did not seat, and the pitch is
+right. This paragraph used to say the opposite, having gone one step past
+its own evidence. The measurement established the **pitch**, and pitch does
+not determine series; the series was named without a housing ever being
+tried, and an order was placed against it.
+
+That day's housing was sold as "MX1.25", and this paragraph then went a
+step past its evidence a second time by treating the label as the series.
+On 2026-10-16 a different kit under the same label seated and latched in
+the same header. One name covers both answers, so the record is: a housing
+was tried on each date, one seated and one did not, and neither outcome
+belongs to the word on the bag.
 
 **[verify] GH by elimination, not by identification.** What is known is
 1.25 mm pitch and not PicoBlade, which leaves GH as the common answer and
