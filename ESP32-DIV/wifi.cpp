@@ -1,5 +1,6 @@
 #include "Stealth.h"
 #include "Eapol.h"
+#include "HandshakeExport.h"
 #include "KeyboardUI.h"
 #include "SettingsStore.h"
 #include "SpiBus.h"
@@ -676,6 +677,11 @@ void do_sampling_FFT() {
     }
   }
 
+#if PUEO_HANDSHAKE_EXPORT
+  /* Task side: turn whatever the callback queued into hccapx records. */
+  HandshakeExport::pump();
+#endif
+
   delay(10);
 }
 
@@ -715,6 +721,14 @@ void wifi_promiscuous(void* buf, wifi_promiscuous_pkt_type_t type) {
       s_eapolFrames++;
     }
   }
+
+#if PUEO_HANDSHAKE_EXPORT
+  /* Hand the key frame to the exporter, outside the lock above because offer()
+   * takes its own. It only copies bytes here; the work is on the task side. */
+  if (em != Eapol::Msg::None) {
+    HandshakeExport::offer(pkt->payload, (uint16_t)ctrl.sig_len, em, millis());
+  }
+#endif
 
   if (ctrl.sig_len > SNAP_LEN) {
     if (em != Eapol::Msg::None) s_eapolLost++;

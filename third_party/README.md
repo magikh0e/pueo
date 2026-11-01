@@ -78,7 +78,15 @@ projectZero does it, never linked into the firmware.
 
 ## Status
 
-Vendored on 2026-10-31. Not compiled, not wired to anything. The next step,
-when I get to it, is to move these into the sketch behind a build flag and feed
-my own captured frames into the serializers, then write the output to the SD
-card. That is the change that will earn a release; this copy does not.
+Vendored on 2026-10-31. The hccapx serializer and the EAPOL parser are wired
+into the sketch behind `PUEO_HANDSHAKE_EXPORT` (see `ESP32-DIV/FeatureFlags.h`
+and `docs/pueo/eapol-capture.md`). The flag defaults to 0, so the shipped
+firmware does not carry them; the files here stay pristine and are pulled in
+through an include path only when the flag is on. `frame_analyzer.c`, the
+promiscuous-capture driver, is not compiled: Pueo captures its own frames and
+`Eapol` is the bounded gatekeeper that decides what reaches risinek's parser.
+
+`pcap_serializer` is still only vendored, not wired. Pueo already writes its
+own pcap from Packet Monitor, so this one waits until there is a reason to
+prefer it. Nothing here has changed behaviour on the board, so no release was
+cut; turning the flag on and capturing a handshake is what would.

@@ -310,3 +310,52 @@ say so in a way that is easy to fix and hard to guess.
    is never exceeded and that it never fires while disarmed. Nothing calls
    it: Packet Monitor is in `WIFI_MODE_NULL` and cannot transmit, and
    changing that is a radio-state change wanting hardware. See above.
+
+## Exporting a handshake for hashcat
+
+The pcap already holds the frames, so for a long time that was the end of it:
+pull the card, open it in Wireshark, run `hcxpcapngtool` on a computer. The
+export skips that step and writes the crackable artifact on the device, a
+hashcat `.hccapx`, next to the pcap in the captures directory as
+`hs_NNNN.hccapx`.
+
+I did not write the serializer. It is risinek's, from the
+esp32-wifi-penetration-tool, MIT licensed and vendored under `third_party/`
+with its provenance recorded there. It ran on the classic ESP32 first, which
+is why it ports without a fight. What I wrote is the bridge in
+`HandshakeExport.cpp`, and the one thing the bridge exists to prevent is the
+reason the rest of this document is careful.
+
+risinek's parser finds the EAPOL payload at a fixed offset without a length
+guard, the same shape of read I spent the "Finding the EAPOL frame" section
+above refusing to copy from Marauder. So I do not let it near a raw frame. My
+own `Eapol` is the gatekeeper: a frame reaches the serializer only once
+`Eapol` has confirmed it is an EAPOL-Key message, that its header is one of
+the two layouts risinek handles, 24 bytes or 26 with QoS, and that the payload
+is within the frame. A fourth address or an HT Control field moves the payload
+somewhere risinek's parser does not look, so I drop those at the door rather
+than let it misread them. Once a frame is through that gate, every read the
+serializer makes is inside what I already bounded.
+
+The split is the same as the pcap writer's, for the same reason. `offer()`
+runs in the promiscuous callback and does nothing but copy the frame into a
+small ring. `pump()` runs on the task side, drives the serializer, and writes
+the file. The serializer keeps one handshake at a time, so the bridge follows
+it: a frame for a different access point starts a new assembly.
+
+A record is useless without the right SSID, because that is the salt the hash
+is cracked against. I read it from the last scan's results by BSSID, and if I
+do not have it yet I hold the record back and say so, rather than write one
+that can never crack. So the workflow is: scan, so the SSID is known, then run
+Packet Monitor to capture. The handshake assist in step 5 would make that
+reliable by forcing a reassociation, and it still does not transmit, so for
+now you wait for a client to connect on its own.
+
+It is off unless you ask for it. The whole feature is behind
+`PUEO_HANDSHAKE_EXPORT` in `FeatureFlags.h`, which defaults to 0, so the
+firmware I ship does not carry it. With the flag off the serializer is not
+compiled and the two hooks in `wifi.cpp` are not even calls. Turn it on by
+setting the flag to 1 or passing `-DPUEO_HANDSHAKE_EXPORT=1`, and the build
+pulls the vendored sources in through the include path `build.sh` adds for
+them. `check_hccapx_export.py` holds all of this to account: the default, the
+fences, the gate, and that the serializer never sees an unbounded frame.

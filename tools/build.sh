@@ -94,6 +94,13 @@ if [ "$PUEO_ROLE" = "beacon" ]; then
   ROLE_INC="-I$(cygpath -m "$REPO/ESP32-DIV" 2>/dev/null || echo "$REPO/ESP32-DIV")"
 fi
 
+# Vendored third-party headers for the handshake exporter, behind
+# PUEO_HANDSHAKE_EXPORT. Same staging reason as ROLE_INC above: a relative
+# ../third_party include does not resolve from the staging copy, so the
+# directory goes on the include path instead. Harmless when the flag is off,
+# because nothing includes from it then, and an unused -I changes no output.
+VENDOR_INC="-I$(cygpath -m "$REPO/third_party/esp32-wifi-penetration-tool" 2>/dev/null || echo "$REPO/third_party/esp32-wifi-penetration-tool")"
+
 # arduino-cli's winget install does not land on the Git Bash PATH.
 if ! command -v arduino-cli >/dev/null 2>&1; then
   PATH="$PATH:/c/Program Files/Arduino CLI"
@@ -325,8 +332,8 @@ compile() {
   _pueo_claim_build
   local maps; maps="$(prefix_maps)"
   arduino-cli compile --warnings all -b "$FQBN" \
-    --build-property "compiler.c.extra_flags=$maps $ROLE_INC" \
-    --build-property "compiler.cpp.extra_flags=$maps $ROLE_INC" \
+    --build-property "compiler.c.extra_flags=$maps $ROLE_INC $VENDOR_INC" \
+    --build-property "compiler.cpp.extra_flags=$maps $ROLE_INC $VENDOR_INC" \
     --build-path "$BUILD_PATH" "$REPO/$SKETCH_DIR" >"$log" 2>&1 || rc=$?
 
   grep -E "ESP32-DIV[\\/][A-Za-z_]+\.(cpp|h|ino).*(warning|error):" "$log" || true
@@ -364,8 +371,8 @@ warnings() {
   _pueo_claim_build
   local maps; maps="$(prefix_maps)"
   arduino-cli compile --warnings all -b "$FQBN" \
-    --build-property "compiler.c.extra_flags=$maps $ROLE_INC" \
-    --build-property "compiler.cpp.extra_flags=$maps $ROLE_INC" \
+    --build-property "compiler.c.extra_flags=$maps $ROLE_INC $VENDOR_INC" \
+    --build-property "compiler.cpp.extra_flags=$maps $ROLE_INC $VENDOR_INC" \
     --build-path "$BUILD_PATH-warnings" "$REPO/$SKETCH_DIR" 2>&1 \
     | grep -E "warning:|Sketch uses|Global variables"
 }
