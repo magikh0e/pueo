@@ -1,0 +1,4 @@
+# Vendored upstream source is kept byte-for-byte as published, with the
+# upstream LF line endings. The checksums in third_party/README.md are taken
+# against those bytes, so no EOL conversion may touch this tree on any machine.
+third_party/** -text
